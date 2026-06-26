@@ -68,17 +68,21 @@ export default function PortalPage() {
         .eq("id", custId)
         .single();
 
-      if (error) throw error;
-      if (data) {
-        setCustomer(data);
-        if (data.portal_passcode === "1234") {
-          setShowChangePin(true);
-        } else {
-          fetchOrders(data.id);
-        }
+      if (error || !data) {
+        // Stale session — customer no longer found. Clear and show login.
+        localStorage.removeItem("printx_portal_customer_id");
+        setIsInitializing(false);
+        return;
+      }
+
+      setCustomer(data);
+      if (data.portal_passcode === "1234") {
+        setShowChangePin(true);
+      } else {
+        fetchOrders(data.id);
       }
     } catch (e) {
-      console.error("Auto login failed:", e);
+      // Silent fallback — clear stale session data
       localStorage.removeItem("printx_portal_customer_id");
     } finally {
       setIsInitializing(false);

@@ -1479,7 +1479,10 @@ export default function POSPage() {
             </div>
             
             <p style={{ fontSize: "11px", color: "var(--text-subtle)", marginTop: "16px", textAlign: "center" }}>
-              Logged in as: {profile?.username} ({profile?.role}) | Default PIN: 1234
+              Logged in as: {profile?.username} ({profile?.role})
+              {profile?.passcode === "1234" && (
+                <span style={{ color: "var(--accent-orange)", marginLeft: "6px" }}>| Default PIN: 1234</span>
+              )}
             </p>
             <button 
               onClick={signOut}
@@ -1553,13 +1556,12 @@ export default function POSPage() {
             <div style={styles.clientSelectFooter}>
               <button
                 onClick={() => {
+                  // Walk-in customer: skip detail form, proceed directly to billing
                   const walkIn = customers.find(c => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("unknown"));
-                  if (walkIn) {
-                    setSelectedCustomer(walkIn);
-                  } else {
-                    setSelectedCustomer({ id: "walkin", name: "Walk-in Customer", phone: "0000000000", outstanding_balance: 0 });
-                  }
+                  const walkInCustomer = walkIn || { id: "walkin", name: "Walk-in Customer", phone: "0000000000", outstanding_balance: 0 };
+                  setSelectedCustomer(walkInCustomer);
                   setShowSelectCustModal(false);
+                  setShowCustModal(false); // Ensure registration form never opens for walk-in
                 }}
                 className="btn btn-secondary"
                 style={{ flex: 1, padding: "12px", justifyContent: "center" }}

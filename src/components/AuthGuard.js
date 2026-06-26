@@ -24,11 +24,16 @@ export function AuthProvider({ children }) {
       setLoading(true);
       const { data: { session }, error } = await supabase.auth.getSession();
       
+      const isPublicPath = 
+        pathname === "/login" || 
+        pathname?.startsWith("/portal") || 
+        pathname?.includes("/print");
+
       if (error || !session) {
         setUser(null);
         setProfile(null);
         setLoading(false);
-        if (pathname !== "/login") {
+        if (!isPublicPath) {
           router.push("/login");
         }
         return;
