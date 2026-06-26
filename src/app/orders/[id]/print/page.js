@@ -390,66 +390,100 @@ export default function PrintPage() {
         .mv-footer { text-align: center; padding: 20px 0 8px; font-size: 11px; color: #9ca3af; }
 
         /* ============================================================
-           DESKTOP A4 PRINT-LIKE VIEW (same as before, just now
-           inside .print-view which is hidden on mobile screens)
+           DESKTOP A4 PRINT VIEW
         ============================================================ */
         .desktop-sheet-wrap {
-          padding: 40px 20px;
+          padding: 30px 20px;
           display: flex;
           flex-direction: column;
           align-items: center;
         }
         .invoice-wrapper {
           background: #ffffff;
-          width: 210mm;
-          min-height: 297mm;
-          padding: 20mm 15mm;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+          width: 190mm;
+          padding: 14mm 14mm 10mm 14mm;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.12);
           border: 1px solid #d1d5db;
-          border-radius: 4px;
+          border-radius: 2px;
           box-sizing: border-box;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          font-size: 10.5px;
-          color: #000;
-          line-height: 1.4;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 10px;
+          color: #111;
+          line-height: 1.45;
         }
-        .d-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-        .d-header-left { flex: 1.2; }
-        .d-doc-title { font-size: 26px; font-weight: 900; margin: 0 0 8px; letter-spacing: -0.02em; color: #0f172a; }
-        .d-shop-name { font-size: 13px; font-weight: 700; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.05em; color: #1e293b; }
-        .d-shop-sub { font-size: 10px; margin: 0 0 2px; color: #475569; }
-        .d-contact-tbl { margin-top: 10px; border-collapse: collapse; }
-        .d-contact-tbl td { padding: 2px 0; font-size: 10px; color: #475569; border: none !important; }
-        .d-contact-tbl td.lbl { width: 80px; font-weight: 600; color: #334155; }
-        .d-header-right { flex: 0.8; display: flex; justify-content: flex-end; align-items: flex-start; }
-        .d-logo { height: 80px; max-width: 100%; object-fit: contain; }
-        .d-sep { border-top: 2px solid #0f172a; margin: 4px 0 24px; }
-        .d-meta-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 40px; margin-bottom: 28px; }
-        .d-client-sec { background: #f8fafc; border-left: 3px solid #0f172a; padding: 14px; border-radius: 4px; }
-        .d-client-tbl, .d-meta-tbl { border-collapse: collapse; width: 100%; }
-        .d-client-tbl td, .d-meta-tbl td { padding: 2px 0; font-size: 10.5px; color: #0f172a; vertical-align: top; border: none !important; }
-        .d-client-tbl td.sec-lbl { font-weight: 700; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; padding-bottom: 6px; }
-        .d-client-tbl td.cname { font-weight: 700; font-size: 12px; color: #0f172a; padding-bottom: 6px; }
-        .d-client-tbl td.lbl { width: 70px; font-weight: 600; color: #475569; }
-        .d-meta-tbl td.lbl { text-align: left; width: 110px; font-weight: 600; color: #475569; }
-        .d-meta-tbl td.val { font-weight: 700; color: #0f172a; }
-        .d-items-tbl { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        .d-items-tbl th { border: none; border-bottom: 2px solid #0f172a; background: #f8fafc; padding: 10px 8px; font-size: 9.5px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em; }
-        .d-items-tbl td { border: none; border-bottom: 1px solid #e2e8f0; padding: 12px 8px; font-size: 10.5px; color: #0f172a; vertical-align: middle; }
-        .d-items-tbl tbody tr:nth-child(even) { background: #f8fafc; }
-        .d-summary-sec { display: flex; justify-content: flex-end; margin-bottom: 30px; }
-        .d-summary-blk { width: 290px; background: #f8fafc; border-radius: 4px; padding: 12px; border: 1px solid #e2e8f0; }
-        .d-sum-tbl { width: 100%; border-collapse: collapse; }
-        .d-sum-tbl td { font-size: 10.5px; padding: 6px 0; border: none; vertical-align: middle; }
-        .d-sum-tbl td.lbl { color: #475569; font-weight: 600; }
-        .d-sum-tbl td.val { font-weight: 500; color: #0f172a; text-align: right; }
-        .d-sum-tbl tr.total-row td { border-top: 2px solid #0f172a; padding: 10px 0 4px; font-weight: 700; }
-        .d-sum-tbl tr.total-row td.lbl { font-size: 12px; color: #0f172a; }
-        .d-sum-tbl tr.total-row td.val { font-size: 14px; font-weight: 900; }
-        .d-terms-sec { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 14px; margin-bottom: 30px; }
-        .d-terms-title { font-size: 10px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
-        .d-terms-text { font-family: inherit; font-size: 9px; color: #475569; white-space: pre-wrap; line-height: 1.5; margin: 0; }
-        .d-footer { border-top: 1px solid #e2e8f0; padding-top: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 9.5px; color: #64748b; margin-top: auto; }
+
+        /* Header */
+        .d-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        .d-header-left { flex: 1; }
+        .d-doc-title { font-size: 22px; font-weight: 900; margin: 0 0 6px; letter-spacing: -0.01em; color: #0f172a; }
+        .d-shop-name { font-size: 11px; font-weight: 700; margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.06em; color: #0f172a; }
+        .d-shop-sub { font-size: 9px; margin: 0; color: #555; line-height: 1.5; }
+        .d-contact-row { margin-top: 5px; font-size: 9px; color: #555; }
+        .d-header-right { display: flex; justify-content: flex-end; align-items: flex-start; }
+        .d-logo { height: 64px; max-width: 130px; object-fit: contain; }
+
+        /* Separator */
+        .d-sep { border: none; border-top: 1.5px solid #0f172a; margin: 8px 0 10px; }
+
+        /* Bill-to + Invoice meta side by side */
+        .d-meta-grid { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+        .d-client-sec { flex: 1; background: #f8fafc; border-left: none; border-top: 2px solid #0f172a; padding: 8px 10px; }
+        .d-meta-sec { text-align: right; }
+        .d-sec-lbl { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 3px; }
+        .d-cust-name { font-size: 11px; font-weight: 700; color: #0f172a; margin-bottom: 2px; }
+        .d-cust-detail { font-size: 9px; color: #555; margin-bottom: 1px; }
+        .d-meta-row { font-size: 9px; color: #555; margin-bottom: 3px; }
+        .d-meta-row span { font-weight: 700; color: #0f172a; margin-left: 6px; }
+        .d-meta-row.status span { font-weight: 800; }
+
+        /* Items table */
+        .d-items-tbl { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .d-items-tbl th {
+          border-bottom: 1.5px solid #0f172a;
+          background: #f1f5f9;
+          padding: 6px 7px;
+          font-size: 8.5px;
+          font-weight: 700;
+          color: #334155;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          white-space: nowrap;
+        }
+        .d-items-tbl td {
+          border: none;
+          border-bottom: 1px solid #e8edf2;
+          padding: 7px 7px;
+          font-size: 9.5px;
+          color: #111;
+          vertical-align: middle;
+        }
+        .d-items-tbl tbody tr:nth-child(even) td { background: #fafbfc; }
+        .d-items-tbl tfoot td {
+          border-top: 1.5px solid #0f172a;
+          border-bottom: none;
+          font-weight: 700;
+          font-size: 9.5px;
+          padding: 6px 7px;
+          background: #f8fafc;
+        }
+
+        /* Summary block */
+        .d-summary-wrap { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+        .d-summary-tbl { width: 220px; border-collapse: collapse; }
+        .d-summary-tbl td { font-size: 9.5px; padding: 4px 0; border: none; }
+        .d-summary-tbl td.lbl { color: #555; }
+        .d-summary-tbl td.val { text-align: right; font-weight: 600; color: #111; }
+        .d-summary-tbl tr.divider td { border-top: 1px dashed #ccc; padding-top: 6px; }
+        .d-summary-tbl tr.total-row td { border-top: 1.5px solid #0f172a; padding-top: 7px; font-weight: 800; font-size: 11px; color: #0f172a; }
+        .d-summary-tbl tr.outstanding-row td { color: #b45309; font-weight: 700; font-size: 9.5px; }
+
+        /* Terms */
+        .d-terms-sec { border-top: 1px solid #e2e8f0; padding-top: 6px; margin-bottom: 8px; }
+        .d-terms-title { font-size: 8px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+        .d-terms-text { font-family: inherit; font-size: 7.5px; color: #888; white-space: pre-wrap; line-height: 1.55; margin: 0; }
+
+        /* Footer */
+        .d-footer { border-top: 1px solid #e2e8f0; padding-top: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 8px; color: #aaa; }
       `}</style>
 
       {/* ============================================================
@@ -599,26 +633,21 @@ export default function PrintPage() {
       </div>
 
       {/* ============================================================
-          DESKTOP / PRINT VIEW — A4 paper layout
+          DESKTOP / PRINT VIEW — Clean A4 layout
       ============================================================ */}
       <div className="print-view">
         <div className="desktop-sheet-wrap">
           <div className="invoice-wrapper">
 
-            {/* Header */}
+            {/* ── HEADER ── */}
             <div className="d-header">
               <div className="d-header-left">
-                <h1 className="d-doc-title">{isQuotation ? "QUOTATION" : "INVOICE"}</h1>
-                <h2 className="d-shop-name">{shopSettings.name}</h2>
-                <p className="d-shop-sub">{shopSettings.addressLine1}</p>
-                <p className="d-shop-sub">{shopSettings.addressLine2}</p>
-                <p className="d-shop-sub">{shopSettings.addressLine3}</p>
-                <table className="d-contact-tbl">
-                  <tbody>
-                    <tr><td className="lbl">Phone:</td><td>{shopSettings.phone}</td></tr>
-                    <tr><td className="lbl">Email:</td><td>{shopSettings.email}</td></tr>
-                  </tbody>
-                </table>
+                <div className="d-doc-title">{isQuotation ? "QUOTATION" : "INVOICE"}</div>
+                <div className="d-shop-name">{shopSettings.name}</div>
+                <div className="d-shop-sub">{shopSettings.addressLine1}, {shopSettings.addressLine2}, {shopSettings.addressLine3}</div>
+                <div className="d-contact-row">
+                  Tel: {shopSettings.phone} &nbsp;·&nbsp; {shopSettings.email}
+                </div>
               </div>
               <div className="d-header-right">
                 <img
@@ -632,129 +661,111 @@ export default function PrintPage() {
 
             <div className="d-sep" />
 
-            {/* Meta Grid */}
+            {/* ── BILL TO + INVOICE META ── */}
             <div className="d-meta-grid">
               <div className="d-client-sec">
-                <table className="d-client-tbl">
-                  <tbody>
-                    <tr><td colSpan="2" className="sec-lbl">Bill to</td></tr>
-                    <tr><td colSpan="2" className="cname">{data.customers?.name || "Walk-in Customer"}</td></tr>
-                    {data.customers?.phone ? (
-                      <tr><td className="lbl">Phone:</td><td>{data.customers.phone}</td></tr>
-                    ) : <tr><td>&nbsp;</td><td>&nbsp;</td></tr>}
-                    {data.customers?.address ? (
-                      <tr><td className="lbl">Address:</td><td>{data.customers.address}</td></tr>
-                    ) : <tr><td>&nbsp;</td><td>&nbsp;</td></tr>}
-                  </tbody>
-                </table>
+                <div className="d-sec-lbl">Billed To</div>
+                <div className="d-cust-name">{data.customers?.name || "Walk-in Customer"}</div>
+                {data.customers?.phone && <div className="d-cust-detail">Tel: {data.customers.phone}</div>}
+                {data.customers?.email && <div className="d-cust-detail">{data.customers.email}</div>}
+                {data.customers?.address && <div className="d-cust-detail">{data.customers.address}</div>}
               </div>
-              <div>
-                <table className="d-meta-tbl">
-                  <tbody>
-                    <tr>
-                      <td className="lbl">{isQuotation ? "Quotation No.:" : "Invoice No.:"}</td>
-                      <td className="val">{isQuotation ? data.quotation_number : data.order_number}</td>
-                    </tr>
-                    <tr><td className="lbl">Date:</td><td className="val">{formattedDate}</td></tr>
-                    <tr><td className="lbl">Due date:</td><td className="val">{formattedDate}</td></tr>
-                    {!isQuotation && (
-                      <tr><td className="lbl">Payment status:</td><td className="val">{getPaymentStatus()}</td></tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="d-meta-sec">
+                <div className="d-meta-row">{isQuotation ? "Quotation No." : "Invoice No."}<span>{isQuotation ? data.quotation_number : data.order_number}</span></div>
+                <div className="d-meta-row">Date<span>{formattedDate}</span></div>
+                {!isQuotation && (
+                  <div className="d-meta-row status">Status<span>{getPaymentStatus()}</span></div>
+                )}
+                {!isQuotation && (
+                  <div className="d-meta-row">Payment<span>{getPaymentMethodLabel()}</span></div>
+                )}
               </div>
             </div>
 
-            {/* Items Table */}
+            {/* ── ITEMS TABLE ── */}
             <table className="d-items-tbl">
               <thead>
                 <tr>
-                  <th style={{ width: "40px" }}>#</th>
-                  <th>Item</th>
-                  <th style={{ width: "70px", textAlign: "right" }}>Qty</th>
-                  <th style={{ width: "100px", textAlign: "right" }}>Unit Price</th>
-                  <th style={{ width: "80px", textAlign: "right" }}>Discount</th>
-                  <th style={{ width: "110px", textAlign: "right" }}>Total</th>
+                  <th style={{ width: "28px", textAlign: "center" }}>#</th>
+                  <th style={{ textAlign: "left" }}>Description</th>
+                  <th style={{ width: "45px", textAlign: "center" }}>Qty</th>
+                  <th style={{ width: "90px", textAlign: "right" }}>Unit Price</th>
+                  <th style={{ width: "75px", textAlign: "right" }}>Discount</th>
+                  <th style={{ width: "90px", textAlign: "right" }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {data.items?.map((item, idx) => (
                   <tr key={idx}>
-                    <td style={{ textAlign: "center" }}>{idx + 1}</td>
+                    <td style={{ textAlign: "center", color: "#888" }}>{idx + 1}</td>
                     <td style={{ textAlign: "left" }}>{item.name}</td>
-                    <td style={{ textAlign: "right" }}>{item.qty}</td>
-                    <td style={{ textAlign: "right" }}>{formatNumber(item.price)}</td>
-                    <td style={{ textAlign: "right" }}>
-                      {item.discount_type === "percentage" ? `${Number(item.discount_value || 0).toFixed(0)}%`
-                        : item.discount_type === "fixed" ? `Rs${Number(item.discount_value || 0).toFixed(0)}`
-                        : item.discount_value && Number(item.discount_value) > 0 ? `Rs${Number(item.discount_value).toFixed(0)}`
-                        : "---"}
+                    <td style={{ textAlign: "center" }}>{item.qty}</td>
+                    <td style={{ textAlign: "right" }}>Rs {formatNumber(item.price)}</td>
+                    <td style={{ textAlign: "right", color: "#888" }}>
+                      {item.discount_type === "percentage" && Number(item.discount_value || 0) > 0
+                        ? `${Number(item.discount_value).toFixed(0)}%`
+                        : item.discount_type === "fixed" && Number(item.discount_value || 0) > 0
+                        ? `Rs ${Number(item.discount_value).toFixed(0)}`
+                        : "—"}
                     </td>
-                    <td style={{ textAlign: "right" }}>{formatNumber(item.total)}</td>
+                    <td style={{ textAlign: "right", fontWeight: "600" }}>Rs {formatNumber(item.total)}</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan="5" style={{ textAlign: "right", color: "#555" }}>Subtotal</td>
+                  <td style={{ textAlign: "right" }}>Rs {formatNumber(data.total_amount)}</td>
+                </tr>
+              </tfoot>
             </table>
 
-            {/* Summary */}
-            <div className="d-summary-sec">
-              <div className="d-summary-blk">
-                <table className="d-sum-tbl">
+            {/* ── SUMMARY ── */}
+            {!isQuotation && (
+              <div className="d-summary-wrap">
+                <table className="d-summary-tbl">
                   <tbody>
                     <tr className="total-row">
-                      <td className="lbl">Total</td>
+                      <td className="lbl">Total Amount</td>
                       <td className="val">{formatCurrency(data.total_amount)}</td>
                     </tr>
-                    <tr><td colSpan="2" style={{ height: "12px" }}></td></tr>
-                    {!isQuotation && (
+                    <tr>
+                      <td className="lbl">Amount Paid</td>
+                      <td className="val" style={{ color: "#16a34a" }}>{formatCurrency(data.paid_amount)}</td>
+                    </tr>
+                    <tr>
+                      <td className="lbl" style={{ fontWeight: "700" }}>Balance Due</td>
+                      <td className="val" style={{ fontWeight: "800", color: Number(data.balance_amount) > 0 ? "#dc2626" : "#16a34a" }}>
+                        {formatCurrency(data.balance_amount)}
+                      </td>
+                    </tr>
+                    {!isWalkIn && (
                       <>
-                        <tr>
-                          <td className="lbl" style={{ fontWeight: "bold" }}>Payment method:</td>
-                          <td className="val" style={{ fontWeight: "bold", textAlign: "right" }}>
-                            {getPaymentMethodLabel() !== "Pending Payment" && getPaymentMethodLabel() !== "N/A" ? getPaymentMethodLabel() : ""}
-                          </td>
+                        <tr className="divider">
+                          <td className="lbl">Previous Outstanding</td>
+                          <td className="val">{formatCurrency(previousOutstanding)}</td>
                         </tr>
-                        <tr>
-                          <td className="lbl">Payment Pending:</td>
-                          <td className="val" style={{ textAlign: "right" }}>{formatCurrency(data.balance_amount)}</td>
+                        <tr className="outstanding-row">
+                          <td className="lbl">Total Outstanding Debt</td>
+                          <td className="val">{formatCurrency(totalOutstanding)}</td>
                         </tr>
-                        <tr>
-                          <td className="lbl">Paid amount:</td>
-                          <td className="val" style={{ fontWeight: "bold", textAlign: "right" }}>{formatCurrency(data.paid_amount)}</td>
-                        </tr>
-                        <tr>
-                          <td className="lbl" style={{ fontWeight: "bold" }}>Amount due:</td>
-                          <td className="val" style={{ fontWeight: "bold", textAlign: "right" }}>{formatCurrency(data.balance_amount)}</td>
-                        </tr>
-                        {!isWalkIn && (
-                          <>
-                            <tr style={{ borderTop: "1px dashed #bcbcbc" }}>
-                              <td className="lbl" style={{ paddingTop: "6px" }}>Prev Outstanding:</td>
-                              <td className="val" style={{ paddingTop: "6px", textAlign: "right" }}>{formatCurrency(previousOutstanding)}</td>
-                            </tr>
-                            <tr>
-                              <td className="lbl" style={{ fontWeight: "bold" }}>Total Outstanding:</td>
-                              <td className="val" style={{ fontWeight: "bold", textAlign: "right" }}>{formatCurrency(totalOutstanding)}</td>
-                            </tr>
-                          </>
-                        )}
                       </>
                     )}
                   </tbody>
                 </table>
               </div>
-            </div>
+            )}
 
-            {/* Terms */}
+            {/* ── TERMS ── */}
             <div className="d-terms-sec">
-              <div className="d-terms-title">Terms and Conditions</div>
+              <div className="d-terms-title">Terms &amp; Conditions</div>
               <pre className="d-terms-text">{shopSettings.terms}</pre>
             </div>
 
-            {/* Footer */}
+            {/* ── FOOTER ── */}
             <div className="d-footer">
-              <span>{shopSettings.footerInfo}</span>
-              <span>Page 1</span>
+              <span>{shopSettings.name} · {shopSettings.phone} · {shopSettings.email}</span>
+              <span>Page 1 of 1</span>
             </div>
 
           </div>
