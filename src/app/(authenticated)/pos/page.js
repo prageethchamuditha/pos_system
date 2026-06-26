@@ -1,0 +1,2884 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/components/AuthGuard";
+import { 
+  Plus, 
+  Minus, 
+  Trash2, 
+  UserPlus, 
+  Search, 
+  FileText, 
+  Check, 
+  AlertCircle,
+  FolderOpen,
+  Tag,
+  Hash,
+  Sparkles,
+  User,
+  RotateCcw,
+  Clock,
+  Printer,
+  Send
+} from "lucide-react";
+
+export default function POSPage() {
+  const router = useRouter();
+  const { profile, signOut } = useAuth();
+
+  // Cart state
+  const [cart, setCart] = useState([]);
+  const [selectedCartItemId, setSelectedCartItemId] = useState(null);
+
+  // Customer state
+  const [customers, setCustomers] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const selectedCustomerRef = useRef(selectedCustomer);
+  useEffect(() => {
+    selectedCustomerRef.current = selectedCustomer;
+  }, [selectedCustomer]);
+  const [showCustModal, setShowCustModal] = useState(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [showSelectCustModal, setShowSelectCustModal] = useState(true);
+  const customerSearchInputRef = useRef(null);
+  
+  // Lock screen state
+  const [isLocked, setIsLocked] = useState(false);
+  const [passcode, setPasscode] = useState("");
+  const [lockError, setLockError] = useState("");
+  const passcodeInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isLocked) {
+      setTimeout(() => {
+        passcodeInputRef.current?.focus();
+      }, 100);
+    }
+  }, [isLocked]);
+
+  useEffect(() => {
+    if (showSelectCustModal && !isLocked) {
+      setTimeout(() => {
+        customerSearchInputRef.current?.focus();
+      }, 100);
+    }
+  }, [showSelectCustModal, isLocked]);
+  
+  // New Customer Form
+  const [newCustName, setNewCustName] = useState("");
+  const [newCustPhone, setNewCustPhone] = useState("");
+  const [newCustEmail, setNewCustEmail] = useState("");
+  const [newCustAddress, setNewCustAddress] = useState("");
+
+  // Payment state
+  const [paidAmount, setPaidAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash"); // 'cash' | 'bank_transfer' | 'pending'
+  
+  // Custom Product Builder Modal
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customDesc, setCustomDesc] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
+  const [customQty, setCustomQty] = useState(1);
+  // UI states
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [completedOrder, setCompletedOrder] = useState(null);
+
+  // Discount Modal States
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [discountingItem, setDiscountingItem] = useState(null);
+  const [discountType, setDiscountType] = useState("percentage"); // 'percentage' | 'fixed'
+  const [discountValue, setDiscountValue] = useState("");
+
+  // Cash Calculator Modal States
+  const [showCashCalcModal, setShowCashCalcModal] = useState(false);
+  const [cashReceived, setCashReceived] = useState("");
+
+  // Calculations
+  const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
+  const tax = Number((subtotal * 0.08).toFixed(2)); // mock 8% tax matching print shop rates
+  const totalAmount = subtotal + tax;
+  const balanceAmount = Math.max(0, totalAmount - Number(paidAmount || 0));
+
+  // Sync paid amount based on payment method selection
+  useEffect(() => {
+    if (paymentMethod === "pending") {
+      setPaidAmount("0");
+    } else if (paymentMethod === "cash" || paymentMethod === "bank_transfer") {
+      setPaidAmount(totalAmount.toFixed(0));
+    }
+  }, [paymentMethod, totalAmount]);
+
+  // Reset payment method if Walk-in customer is selected
+  useEffect(() => {
+    if (selectedCustomer) {
+      const isWalkIn = selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown");
+      if (isWalkIn && paymentMethod === "pending") {
+        setPaymentMethod("cash");
+      }
+    }
+  }, [selectedCustomer, paymentMethod]);
+
+  const handleUnlock = async () => {
+    if (!profile) return;
+    try {
+      const { data: dbProfile, error } = await supabase
+        .from("profiles")
+        .select("passcode")
+        .eq("id", profile.id)
+        .single();
+      
+      if (error || !dbProfile) {
+        setLockError("Verification failed. Please try again.");
+        return;
+      }
+
+      if (passcode === dbProfile.passcode) {
+        setIsLocked(false);
+        setPasscode("");
+        setLockError("");
+      } else {
+        setLockError("Incorrect passcode. Try again.");
+        setPasscode("");
+      }
+    } catch (err) {
+      setLockError("Connection issue. Try again.");
+    }
+  };
+
+  // Idle timeout passcode lock (2 minutes = 120,000ms)
+  useEffect(() => {
+    let idleTimer;
+    
+    const resetIdleTimer = () => {
+      if (isLocked) return;
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        setIsLocked(true);
+      }, 120000); // 2 minutes
+    };
+
+    const activityEvents = ["mousemove", "keypress", "click", "scroll", "touchstart"];
+    activityEvents.forEach(event => window.addEventListener(event, resetIdleTimer));
+    
+    resetIdleTimer();
+
+    return () => {
+      clearTimeout(idleTimer);
+      activityEvents.forEach(event => window.removeEventListener(event, resetIdleTimer));
+    };
+  }, [isLocked]);
+
+  // Global keydown handler to trigger Cash Calculator Modal when Enter is pressed
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Enter") {
+        // Ignore keydown if user is currently inside an input/textarea of another active modal or search box
+        const activeEl = document.activeElement;
+        if (activeEl) {
+          const tagName = activeEl.tagName;
+          const isInputField = tagName === "INPUT" || tagName === "TEXTAREA" || activeEl.contentEditable === "true";
+          
+          // Allow Enter key inside cash calculator input or discount input
+          if (activeEl.id === "cash-received-input" || activeEl.id === "item-discount-input") {
+            return;
+          }
+          // Do not hijack Enter if user is typing in catalog search or customer search or lock PIN code
+          if (
+            activeEl.id === "catalog-search-input" || 
+            activeEl.id === "customer-search-input" || 
+            activeEl.id === "customer-modal-search" ||
+            isLocked
+          ) {
+            return;
+          }
+          if (isInputField && (showCustModal || showCustomModal || showSelectCustModal || showDiscountModal || showCashCalcModal)) {
+            return;
+          }
+        }
+
+        if (cart.length > 0 && !showSelectCustModal && !isLocked && !showCustModal && !showCustomModal && !completedOrder && !showDiscountModal && !showCashCalcModal) {
+          e.preventDefault();
+          // Initialize cashReceived with totalAmount to pay, or empty string
+          setCashReceived(totalAmount.toFixed(0));
+          setShowCashCalcModal(true);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [cart, showSelectCustModal, isLocked, showCustModal, showCustomModal, completedOrder, showDiscountModal, showCashCalcModal, totalAmount]);
+
+  // Load products dynamically from settings (localStorage) or fallback to defaults
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    try {
+      const savedProducts = localStorage.getItem("printx_pos_products");
+      if (savedProducts) {
+        setProducts(JSON.parse(savedProducts));
+      } else {
+        const defaultProducts = [
+          { id: "p1", name: "Business Cards (x500)", price: 3500, category: "Cards" },
+          { id: "p2", name: "Flex Banner (per sqft)", price: 150, category: "Banners" },
+          { id: "p3", name: "Sticker Sheet (A3)", price: 250, category: "Stickers" },
+          { id: "p4", name: "Brochure (A4 Tri-fold)", price: 80, category: "Documents" },
+          { id: "p5", name: "A4 Document Print (B&W)", price: 15, category: "Documents" },
+          { id: "p6", name: "A4 Color Document Print", price: 40, category: "Documents" },
+          { id: "p7", name: "ID Card Print & Lanyard", price: 350, category: "Cards" },
+          { id: "p8", name: "Letterhead Printing (x100)", price: 1800, category: "Documents" },
+        ];
+        setProducts(defaultProducts);
+        localStorage.setItem("printx_pos_products", JSON.stringify(defaultProducts));
+      }
+    } catch (e) {
+      console.error("Failed to load POS catalog items:", e);
+    }
+  }, []);
+
+  // Compute categories dynamically based on products array to support user-added categories
+  const categories = ["All", ...Array.from(new Set(products.map(p => p.category || "Uncategorized")))];
+  const [activeCategory, setActiveCategory] = useState("All");
+
+  useEffect(() => {
+    fetchCustomers();
+
+    // Subscribe to real-time customer updates
+    const customersChannel = supabase
+      .channel("pos-customers-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "customers" },
+        () => {
+          fetchCustomers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(customersChannel);
+    };
+  }, []);
+
+  const fetchCustomers = async () => {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("*")
+      .order("name", { ascending: true });
+    
+    if (error) {
+      console.error("Error fetching customers:", error);
+    } else {
+      const list = data || [];
+      setCustomers(list);
+      
+      const currentSelected = selectedCustomerRef.current;
+      // Auto-select Walk-in Customer if available
+      const walkIn = list.find(c => c.name.toLowerCase().includes("walk-in"));
+      if (walkIn && !currentSelected) {
+        setSelectedCustomer(walkIn);
+      } else if (currentSelected) {
+        // Update current customer details (outstanding balance) from fresh database list
+        const fresh = list.find(c => c.id === currentSelected.id);
+        if (fresh) {
+          setSelectedCustomer(fresh);
+        }
+      }
+    }
+  };
+
+  const calculateItemTotal = (price, qty, discountType, discountValue) => {
+    const quantity = qty === "" ? 0 : Number(qty);
+    const originalPrice = Number(price || 0);
+    const discVal = Number(discountValue || 0);
+    let discountedPrice = originalPrice;
+    
+    if (discountType === "percentage") {
+      discountedPrice = Math.max(0, originalPrice - (originalPrice * (discVal / 100)));
+    } else if (discountType === "fixed") {
+      discountedPrice = Math.max(0, originalPrice - discVal);
+    }
+    
+    return {
+      discountedPrice: Number(discountedPrice.toFixed(2)),
+      total: Number((quantity * discountedPrice).toFixed(2))
+    };
+  };
+
+  // Add catalog product to cart
+  const handleAddProduct = (prod) => {
+    const existing = cart.find(item => item.product_id === prod.id);
+    if (existing) {
+      // Increment quantity
+      setCart(cart.map(item => {
+        if (item.product_id === prod.id) {
+          const newQty = item.qty + 1;
+          const { discountedPrice, total } = calculateItemTotal(item.price, newQty, item.discountType, item.discountValue);
+          return { ...item, qty: newQty, discountedPrice, total };
+        }
+        return item;
+      }));
+      setSelectedCartItemId(existing.id);
+    } else {
+      const newItem = {
+        id: Date.now(),
+        product_id: prod.id,
+        name: prod.name,
+        qty: 1,
+        price: prod.price,
+        discountType: "none",
+        discountValue: 0,
+        discountedPrice: prod.price,
+        total: prod.price
+      };
+      setCart([...cart, newItem]);
+      setSelectedCartItemId(newItem.id);
+    }
+    setErrorMsg("");
+  };
+
+  // Add custom typed product
+  const handleAddCustomProduct = (e) => {
+    e.preventDefault();
+    if (!customDesc.trim() || !customPrice || Number(customPrice) <= 0 || Number(customQty) <= 0) return;
+
+    const newItem = {
+      id: Date.now(),
+      product_id: "custom-" + Date.now(),
+      name: customDesc.trim(),
+      qty: Number(customQty),
+      price: Number(customPrice),
+      discountType: "none",
+      discountValue: 0,
+      discountedPrice: Number(customPrice),
+      total: Number(customQty) * Number(customPrice)
+    };
+
+    setCart([...cart, newItem]);
+    setSelectedCartItemId(newItem.id);
+    setCustomDesc("");
+    setCustomPrice("");
+    setCustomQty(1);
+    setShowCustomModal(false);
+    setErrorMsg("");
+  };
+
+  // Adjust quantity from cart listing
+  const handleAdjustQty = (itemId, adjustment) => {
+    setCart(cart.map(item => {
+      if (item.id === itemId) {
+        const currentQty = item.qty === "" ? 1 : Number(item.qty);
+        const newQty = Math.max(1, currentQty + adjustment);
+        const { discountedPrice, total } = calculateItemTotal(item.price, newQty, item.discountType, item.discountValue);
+        return { ...item, qty: newQty, discountedPrice, total };
+      }
+      return item;
+    }));
+  };
+
+  // Set quantity to an exact manual value
+  const handleSetQty = (itemId, newQty) => {
+    setCart(cart.map(item => {
+      if (item.id === itemId) {
+        const qtyVal = newQty === "" ? "" : Number(newQty);
+        const { discountedPrice, total } = calculateItemTotal(item.price, qtyVal, item.discountType, item.discountValue);
+        return {
+          ...item,
+          qty: qtyVal,
+          discountedPrice,
+          total
+        };
+      }
+      return item;
+    }));
+  };
+
+  // Prompt the user to enter quantity manually
+  const handlePromptQty = () => {
+    if (!selectedCartItemId) return;
+    const item = cart.find(i => i.id === selectedCartItemId);
+    if (!item) return;
+    const currentQty = item.qty === "" ? "1" : String(item.qty);
+    const input = prompt(`Enter quantity for ${item.name}:`, currentQty);
+    if (input === null) return; // Cancelled
+    const val = parseInt(input);
+    if (!isNaN(val) && val > 0) {
+      handleSetQty(selectedCartItemId, val);
+    } else {
+      alert("Please enter a valid quantity greater than zero.");
+    }
+  };
+
+  const handleRemoveItem = (itemId) => {
+    setCart(cart.filter(item => item.id !== itemId));
+    if (selectedCartItemId === itemId) {
+      setSelectedCartItemId(null);
+    }
+  };
+
+  const handleApplyDiscount = (itemId, type, value) => {
+    setCart(cart.map(item => {
+      if (item.id === itemId) {
+        const { discountedPrice, total } = calculateItemTotal(item.price, item.qty, type, value);
+        return {
+          ...item,
+          discountType: type,
+          discountValue: Number(value || 0),
+          discountedPrice,
+          total
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleRemoveDiscount = (itemId) => {
+    setCart(cart.map(item => {
+      if (item.id === itemId) {
+        const { discountedPrice, total } = calculateItemTotal(item.price, item.qty, "none", 0);
+        return {
+          ...item,
+          discountType: "none",
+          discountValue: 0,
+          discountedPrice,
+          total
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleVoidOrder = () => {
+    if (window.confirm("Are you sure you want to void this active order?")) {
+      setCart([]);
+      setSelectedCartItemId(null);
+      setPaidAmount("");
+      setErrorMsg("");
+      setSuccessMsg("");
+      setSelectedCustomer(null);
+      setShowSelectCustModal(true);
+    }
+  };
+
+
+  const handleCreateCustomer = async (e) => {
+    e.preventDefault();
+    if (!newCustName.trim() || !newCustPhone.trim()) {
+      setErrorMsg("Customer name and phone number are required.");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .insert({
+          name: newCustName.trim(),
+          phone: newCustPhone.trim(),
+          email: newCustEmail.trim() || null,
+          address: newCustAddress.trim() || null,
+          outstanding_balance: 0,
+          portal_passcode: "1234",
+          portal_duration_limit: "2m",
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Sync customer registration to Google Sheets
+      try {
+        fetch("/api/sync-sheets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            order_number: "REGISTRATION",
+            customer_name: data.name,
+            customer_phone: data.phone,
+            total_amount: 0,
+            paid_amount: 0,
+            balance_amount: 0,
+            items: [],
+            date: new Date().toISOString(),
+          }),
+        });
+      } catch (syncErr) {
+        console.error("Sheets registration sync failed:", syncErr);
+      }
+
+      setSelectedCustomer(data);
+      setNewCustName("");
+      setNewCustPhone("");
+      setNewCustEmail("");
+      setNewCustAddress("");
+      setShowCustModal(false);
+      fetchCustomers();
+      setShowSelectCustModal(false);
+      setSuccessMsg("Customer registered!");
+      setTimeout(() => setSuccessMsg(""), 2000);
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to create customer.");
+    }
+  };
+
+  const generateWhatsAppLink = (customer, orderNum, orderId, total, paid, balance, itemsList) => {
+    if (!customer || customer.name.toLowerCase().includes("walk-in") || customer.name.toLowerCase().includes("unknown")) {
+      return null;
+    }
+
+    // Format phone number
+    let phone = customer.phone.replace(/\D/g, "");
+    if (phone.startsWith("0")) {
+      phone = "94" + phone.substring(1);
+    } else if (!phone.startsWith("94") && phone.length === 9) {
+      phone = "94" + phone;
+    }
+
+    const itemsText = itemsList
+      .map(item => `• *${item.name}* (x${item.qty}) - ${Number(item.price).toFixed(0)} LKR`)
+      .join("\n");
+
+    const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+    const receiptUrl = `${origin}/orders/${orderId}/print`;
+
+    // Fetch dynamic outstanding balance (which includes the new balance)
+    const newOutstandingBalance = Number(customer.outstanding_balance || 0) + balance;
+
+    const message = `Hello *${customer.name}*,\n\n` +
+      `Thank you for choosing *PRINT X*! 😊\n\n` +
+      `Here are your billing details for Order *${orderNum}*:\n` +
+      `----------------------------------------\n` +
+      `${itemsText}\n` +
+      `----------------------------------------\n` +
+      `*Total Amount:* ${total.toFixed(0)} LKR\n` +
+      `*Amount Paid:* ${paid.toFixed(0)} LKR\n` +
+      `*Remaining Balance:* ${balance.toFixed(0)} LKR\n\n` +
+      `*Your Total Outstanding Debt:* ${newOutstandingBalance.toFixed(0)} LKR\n\n` +
+      `You can view/print your official receipt here:\n` +
+      `${receiptUrl}\n\n` +
+      `Thank you for your business! 🙏`;
+
+    return `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
+  };
+
+  const handleCheckout = async (isQuotation = false) => {
+    if (cart.length === 0) {
+      setErrorMsg("Please add products to the cart before checking out.");
+      return;
+    }
+
+    if (cart.some(item => !item.qty || Number(item.qty) <= 0)) {
+      setErrorMsg("Please make sure all items have a valid quantity greater than zero.");
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    try {
+      const date = new Date();
+      const yearMonth = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, "0")}`;
+
+      // Resolve Customer to Use (default to Walk-in Customer if none selected)
+      let customerToUse = selectedCustomer;
+      if (!customerToUse) {
+        const walkIn = customers.find(c => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("unknown"));
+        if (walkIn) {
+          customerToUse = walkIn;
+        } else {
+          // Auto create Walk-in Customer in database
+          const { data: newWalkIn, error: createError } = await supabase
+            .from("customers")
+            .insert({
+              name: "Walk-in Customer",
+              phone: "0000000000",
+              outstanding_balance: 0,
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+          if (createError) throw new Error("Failed to auto-create Walk-in Customer: " + createError.message);
+          customerToUse = newWalkIn;
+          fetchCustomers(); // Refetch
+        }
+      }
+
+      // Check walk-in constraints
+      const isWalkIn = customerToUse.name.toLowerCase().includes("walk-in") || customerToUse.name.toLowerCase().includes("unknown");
+      if (paymentMethod === "pending" && isWalkIn && !isQuotation) {
+        setErrorMsg("Pending Payment requires a registered customer. Walk-in / Unknown clients cannot have unpaid bills.");
+        setSubmitting(false);
+        return;
+      }
+
+      if (isQuotation) {
+        // 1. Generate Quotation ID
+        const { data: countData } = await supabase
+          .from("quotations")
+          .select("id")
+          .gte("created_at", new Date(date.getFullYear(), date.getMonth(), 1).toISOString());
+
+        const seq = ((countData?.length || 0) + 1).toString().padStart(4, "0");
+        const quotationNum = `QT-${yearMonth}-${seq}`;
+
+        // 2. Insert Quotation
+        const { data: quotation, error: qError } = await supabase
+          .from("quotations")
+          .insert({
+            quotation_number: quotationNum,
+            customer_id: customerToUse.id,
+            total_amount: totalAmount,
+            items: cart.map(item => ({ 
+              name: item.name, 
+              qty: item.qty, 
+              price: item.price, 
+              discount_type: item.discountType || "none",
+              discount_value: item.discountValue || 0,
+              discounted_price: item.discountedPrice || item.price,
+              total: item.total 
+            })),
+            created_by: profile.id,
+            created_at: new Date().toISOString(),
+            converted_to_order: false
+          })
+          .select()
+          .single();
+
+        if (qError) throw qError;
+
+        setSuccessMsg(`Quotation ${quotationNum} Saved!`);
+        setCart([]);
+        setPaidAmount("");
+        setSelectedCartItemId(null);
+
+        setTimeout(() => {
+          router.push("/quotations");
+        }, 1500);
+
+      } else {
+        // 1. Generate Order ID
+        const { data: countData } = await supabase
+          .from("orders")
+          .select("id")
+          .gte("created_at", new Date(date.getFullYear(), date.getMonth(), 1).toISOString());
+
+        const seq = ((countData?.length || 0) + 1).toString().padStart(4, "0");
+        const orderNum = `PX-${yearMonth}-${seq}`;
+
+        // 2. Insert Order
+        const { data: order, error: oError } = await supabase
+          .from("orders")
+          .insert({
+            order_number: orderNum,
+            customer_id: customerToUse.id,
+            total_amount: totalAmount,
+            paid_amount: Number(paidAmount || 0),
+            balance_amount: balanceAmount,
+            payment_method: paymentMethod,
+            items: cart.map(item => ({ 
+              name: item.name, 
+              qty: item.qty, 
+              price: item.price, 
+              discount_type: item.discountType || "none",
+              discount_value: item.discountValue || 0,
+              discounted_price: item.discountedPrice || item.price,
+              total: item.total 
+            })),
+            created_by: profile.id,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (oError) throw oError;
+
+        // 3. Update customer outstanding balance if remaining balance exists
+        if (balanceAmount > 0) {
+          const { error: uError } = await supabase
+            .from("customers")
+            .update({
+              outstanding_balance: Number(customerToUse.outstanding_balance || 0) + balanceAmount
+            })
+            .eq("id", customerToUse.id);
+          if (uError) console.error("Failed to update customer balance:", uError);
+        }
+
+        // 4. Send to Google Sheets (async sync)
+        try {
+          fetch("/api/sync-sheets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              order_number: orderNum,
+              customer_name: customerToUse.name,
+              customer_phone: customerToUse.phone,
+              total_amount: totalAmount,
+              paid_amount: Number(paidAmount || 0),
+              balance_amount: balanceAmount,
+              items: cart.map(item => ({ 
+                name: item.name, 
+                qty: item.qty, 
+                price: item.price, 
+                discount_type: item.discountType || "none",
+                discount_value: item.discountValue || 0,
+                discounted_price: item.discountedPrice || item.price,
+                total: item.total 
+              })),
+              date: new Date().toISOString()
+            })
+          });
+        } catch (syncErr) {
+          console.error("Sheets sync failed:", syncErr);
+        }
+
+        setSuccessMsg(`Order ${orderNum} Created Successfully!`);
+        
+        // If not walk-in customer, redirect/open WhatsApp Web automatically
+        let waLink = null;
+        if (!isWalkIn) {
+          waLink = generateWhatsAppLink(
+            customerToUse,
+            orderNum,
+            order.id,
+            totalAmount,
+            Number(paidAmount || 0),
+            balanceAmount,
+            cart
+          );
+          if (waLink) {
+            window.open(waLink, "_blank");
+          }
+        }
+
+        // Store completed order in state to trigger custom printed bill modal instead of redirecting
+        setCompletedOrder({
+          orderNum,
+          orderId: order.id,
+          customerName: customerToUse.name,
+          customerPhone: customerToUse.phone,
+          total: totalAmount,
+          paid: Number(paidAmount || 0),
+          balance: balanceAmount,
+          items: cart,
+          waLink: waLink
+        });
+
+        setCart([]);
+        setPaidAmount("");
+        setSelectedCartItemId(null);
+      }
+    } catch (err) {
+      setErrorMsg(err.message || "Something went wrong. Please check again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const filteredProducts = products.filter(prod => {
+    const matchesCategory = activeCategory === "All" || prod.category === activeCategory;
+    const matchesSearch = prod.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const filteredCustomers = customers.filter(cust => {
+    return (
+      cust.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+      cust.phone.includes(customerSearchQuery)
+    );
+  });
+
+  return (
+    <div style={styles.posWrapper}>
+      {/* Top Banner Notifications */}
+      {successMsg && (
+        <div style={styles.notificationOverlay}>
+          <div style={styles.successBanner} className="animate-slide-down">
+            <Check size={16} />
+            <span>{successMsg}</span>
+          </div>
+        </div>
+      )}
+      {errorMsg && (
+        <div style={styles.notificationOverlay}>
+          <div style={styles.errorBanner} className="animate-slide-down">
+            <AlertCircle size={16} />
+            <span>{errorMsg}</span>
+          </div>
+        </div>
+      )}
+
+      {profile?.passcode === "1234" && (
+        <div style={{
+          background: "var(--accent-red-glow)",
+          color: "var(--accent-red)",
+          border: "1px solid rgba(239, 68, 68, 0.2)",
+          padding: "10px 16px",
+          borderRadius: "var(--radius-sm)",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          fontSize: "13px",
+          fontWeight: "600",
+          marginBottom: "4px",
+        }}>
+          <AlertCircle size={16} />
+          <span>Security Warning: You are using the default staff passcode PIN "1234". Please go to <Link href="/settings" style={{ color: "#ffffff", textDecoration: "underline" }}>Settings</Link> to change it.</span>
+        </div>
+      )}
+
+      <div style={styles.posGrid}>
+        {/* LEFT PANEL: BILLING & ACTIVE CART */}
+        <section style={styles.leftPanel} className="glass-panel">
+          
+          <div style={styles.cartHeader}>
+            <button 
+              onClick={() => {
+                if (selectedCartItemId) {
+                  handleRemoveItem(selectedCartItemId);
+                }
+              }} 
+              style={styles.cartActionBtnRed}
+              disabled={!selectedCartItemId}
+            >
+              <Trash2 size={16} />
+              <span>Delete</span>
+            </button>
+            
+            <div style={styles.cartHeaderTitle}>
+              <span>Active Bill</span>
+            </div>
+
+            <button 
+              onClick={handlePromptQty}
+              style={styles.cartActionBtn}
+              disabled={!selectedCartItemId}
+              title="Enter manual quantity"
+            >
+              <Plus size={16} />
+              <span>Qty</span>
+            </button>
+          </div>
+ 
+          {/* Cart Scrollable Items List */}
+          <div style={styles.cartItemsScroll}>
+            {cart.length === 0 ? (
+              <div style={styles.emptyCartPlaceholder}>
+                <Sparkles size={32} style={{ color: "var(--text-subtle)", opacity: 0.3, marginBottom: "12px" }} />
+                <p>Register order items by selecting catalog panels on the right.</p>
+              </div>
+            ) : (
+              cart.map((item) => {
+                const isSelected = selectedCartItemId === item.id;
+                return (
+                  <div 
+                    key={item.id} 
+                    onClick={() => setSelectedCartItemId(item.id)}
+                    style={{
+                      ...styles.cartRow,
+                      ...(isSelected ? styles.cartRowSelected : {})
+                    }}
+                  >
+                    <div style={styles.cartRowHeader}>
+                      <span style={styles.cartRowName}>{item.name}</span>
+                      <span style={styles.cartRowQty}>{item.qty}</span>
+                    </div>
+                    <div style={styles.cartRowDetails}>
+                      <div>
+                        <span>{item.qty} x {item.price} LKR</span>
+                        {item.discountType && item.discountType !== "none" && (
+                          <span style={{ color: "var(--accent-orange)", fontSize: "11px", marginLeft: "6px" }}>
+                            (-{item.discountType === "percentage" ? `${item.discountValue}%` : `${item.discountValue} LKR`})
+                          </span>
+                        )}
+                      </div>
+                      <span style={styles.cartRowTotal}>{item.total} LKR</span>
+                    </div>
+ 
+                    {/* Touch quantity adjustment overlay */}
+                    {isSelected && (
+                      <div style={styles.rowControls}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                          <span style={styles.controlLabel}>Manual Qty</span>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <button onClick={(e) => { e.stopPropagation(); handleAdjustQty(item.id, -1); }} style={styles.controlBtn}>
+                              <Minus size={14} />
+                            </button>
+                            <input 
+                              type="number"
+                              min="1"
+                              value={item.qty}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (!isNaN(val) && val > 0) {
+                                  handleSetQty(item.id, val);
+                                } else if (e.target.value === "") {
+                                  handleSetQty(item.id, "");
+                                }
+                              }}
+                              onBlur={() => {
+                                if (item.qty === "" || item.qty <= 0) {
+                                  handleSetQty(item.id, 1);
+                                }
+                              }}
+                              style={styles.controlQtyInput}
+                            />
+                            <button onClick={(e) => { e.stopPropagation(); handleAdjustQty(item.id, 1); }} style={styles.controlBtn}>
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Item-level discount trigger */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: '8px', borderTop: '1px dashed rgba(255,255,255,0.08)', paddingTop: '8px' }} onClick={(e) => e.stopPropagation()}>
+                          <span style={styles.controlLabel}>Item Discount</span>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDiscountingItem(item);
+                                setDiscountType(item.discountType === "none" ? "percentage" : item.discountType);
+                                setDiscountValue(item.discountType === "none" ? "" : String(item.discountValue));
+                                setShowDiscountModal(true);
+                              }}
+                              style={{
+                                background: item.discountType !== "none" ? "var(--accent-orange-glow)" : "var(--bg-surface-elevated)",
+                                border: "1px solid " + (item.discountType !== "none" ? "var(--accent-orange)" : "var(--border)"),
+                                color: item.discountType !== "none" ? "var(--accent-orange)" : "var(--text-muted)",
+                                padding: "4px 8px",
+                                borderRadius: "var(--radius-sm)",
+                                fontSize: "11px",
+                                fontWeight: "600",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px"
+                              }}
+                            >
+                              <Tag size={10} />
+                              <span>
+                                {item.discountType === "percentage" 
+                                  ? `-${item.discountValue}%` 
+                                  : item.discountType === "fixed" 
+                                    ? `-${item.discountValue} LKR` 
+                                    : "Apply Disc"}
+                              </span>
+                            </button>
+                            {item.discountType !== "none" && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDiscount(item.id)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "var(--accent-red)",
+                                  fontSize: "11px",
+                                  cursor: "pointer",
+                                  padding: "2px"
+                                }}
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Cart Financial Summary & Checkout */}
+          <div style={styles.cartTotalsBox}>
+            <div style={styles.totalRow}>
+              <span>Subtotal</span>
+              <span>{subtotal.toFixed(0)} LKR</span>
+            </div>
+            <div style={styles.totalRow}>
+              <span>Tax (8%)</span>
+              <span>{tax.toFixed(0)} LKR</span>
+            </div>
+            <div style={styles.grandTotalRow}>
+              <span>Total</span>
+              <span>{totalAmount.toFixed(0)} LKR</span>
+            </div>
+            
+            {/* Payment Method Selector */}
+            <div style={styles.methodSelectorBox}>
+              <div style={styles.methodButtons}>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("cash")}
+                  style={{
+                    ...styles.methodBtn,
+                    ...(paymentMethod === "cash" ? styles.methodBtnActive : {})
+                  }}
+                  disabled={cart.length === 0}
+                >
+                  💵 Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("bank_transfer")}
+                  style={{
+                    ...styles.methodBtn,
+                    ...(paymentMethod === "bank_transfer" ? styles.methodBtnActive : {})
+                  }}
+                  disabled={cart.length === 0}
+                >
+                  🏦 Transfer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const isWalkIn = !selectedCustomer || selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown");
+                    if (isWalkIn) {
+                      alert("Pending payment is only allowed for registered customers. Please select or create a customer profile first.");
+                      return;
+                    }
+                    setPaymentMethod("pending");
+                  }}
+                  style={{
+                    ...styles.methodBtn,
+                    ...(paymentMethod === "pending" ? styles.methodBtnActive : {}),
+                    ...((!selectedCustomer || selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown")) ? styles.methodBtnDisabled : {})
+                  }}
+                  disabled={cart.length === 0}
+                >
+                  ⏳ Pending
+                </button>
+              </div>
+            </div>
+
+            {/* Split settlement amount field */}
+            <div style={styles.settleInputContainer}>
+              <span style={styles.settleLabel}>Amount Paid:</span>
+              <input 
+                type="number" 
+                placeholder="LKR Paid"
+                style={styles.settleInput}
+                value={paidAmount}
+                onChange={(e) => setPaidAmount(e.target.value)}
+                disabled={cart.length === 0 || paymentMethod === "pending" || (!selectedCustomer || selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown"))}
+              />
+            </div>
+            {paidAmount && (
+              <div style={styles.balanceRow}>
+                <span>Balance Due:</span>
+                <span style={{ color: balanceAmount > 0 ? "var(--accent-orange)" : "var(--accent-green)" }}>
+                  {balanceAmount.toFixed(0)} LKR
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Cart Footer Actions */}
+          <div style={styles.cartFooter}>
+            <button onClick={handleVoidOrder} style={styles.voidBtn} className="btn btn-danger" disabled={cart.length === 0}>
+              <RotateCcw size={16} />
+              <span>Void order</span>
+            </button>
+            <button onClick={() => handleCheckout(true)} style={styles.quoteBtn} className="btn btn-secondary" disabled={cart.length === 0}>
+              <FileText size={16} />
+              <span>Quotation</span>
+            </button>
+            <button 
+              onClick={() => {
+                setCashReceived(totalAmount.toFixed(0));
+                setShowCashCalcModal(true);
+              }} 
+              style={styles.payBtn} 
+              className="btn btn-primary" 
+              disabled={cart.length === 0}
+            >
+              <Check size={16} />
+              <span>Payment</span>
+            </button>
+          </div>
+        </section>
+
+        {/* RIGHT PANEL: CATALOG GRID & CLIENT SELECTOR */}
+        <section style={styles.rightPanel}>
+          
+          {/* Top Row: Client profile Selector */}
+          <div className="glass-panel" style={styles.clientBar}>
+            <div style={styles.clientSelector}>
+              <User size={16} style={{ color: "var(--primary)" }} />
+              {selectedCustomer ? (
+                <div style={styles.clientBadge}>
+                  <span style={styles.clientNameText}>{selectedCustomer.name}</span>
+                  <span style={styles.clientPhoneText}> ({selectedCustomer.phone})</span>
+                  <span style={styles.outstandingText}> | Outstanding: {Number(selectedCustomer.outstanding_balance || 0).toFixed(2)} LKR</span>
+                </div>
+              ) : (
+                <span style={styles.noClientText}>Select client profile for this transaction</span>
+              )}
+            </div>
+
+            <div style={styles.clientActions}>
+              <Link 
+                href="/dashboard" 
+                className="btn btn-danger"
+                style={{ ...styles.smallActionBtn, background: "rgba(239, 68, 68, 0.15)", borderColor: "rgba(239, 68, 68, 0.3)", color: "hsl(350, 80%, 65%)" }}
+              >
+                Exit POS
+              </Link>
+
+              <button 
+                type="button" 
+                onClick={() => setShowCustModal(true)} 
+                className="btn btn-secondary"
+                style={styles.smallActionBtn}
+              >
+                <UserPlus size={14} />
+                <span>Add Client</span>
+              </button>
+
+              {selectedCustomer && (
+                <button 
+                  onClick={() => setSelectedCustomer(null)} 
+                  className="btn btn-secondary"
+                  style={styles.smallActionBtn}
+                >
+                  Clear Selection
+                </button>
+              )}
+            </div>
+
+            {/* Inline Customer Directory Search Panel (Only visible when no client selected) */}
+            {!selectedCustomer && (
+              <div style={styles.custSearchOverlay}>
+                <div style={styles.custSearchBar}>
+                  <Search size={14} style={styles.custSearchIcon} />
+                  <input
+                    id="customer-search-input"
+                    type="text"
+                    placeholder="Search directory by phone or name..."
+                    className="input-field"
+                    style={styles.custSearchInput}
+                    value={customerSearchQuery}
+                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                  />
+                </div>
+                {customerSearchQuery && (
+                  <div style={styles.custResultsDrop} className="glass-panel">
+                    {filteredCustomers.length === 0 ? (
+                      <div style={styles.emptyResultsMsg}>No customers matched. Click "Add Client" to register.</div>
+                    ) : (
+                      filteredCustomers.map(cust => (
+                        <div 
+                          key={cust.id} 
+                          onClick={() => { setSelectedCustomer(cust); setCustomerSearchQuery(""); }}
+                          style={styles.custResultRow}
+                        >
+                          <div>
+                            <strong>{cust.name}</strong> ({cust.phone})
+                          </div>
+                          {cust.outstanding_balance > 0 && (
+                            <span style={{ color: "var(--accent-orange)", fontSize: "11px" }}>{cust.outstanding_balance} LKR outstanding</span>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Catalog Operations Bar */}
+          <div className="glass-panel" style={styles.operationsBar}>
+            {/* Category selection */}
+            <div style={styles.categoryFilters}>
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  style={{
+                    ...styles.categoryTab,
+                    ...(activeCategory === cat ? styles.categoryTabActive : {})
+                  }}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Catalog search field */}
+            <div style={styles.catalogSearchBar}>
+              <Search size={16} style={styles.catalogSearchIcon} />
+              <input
+                id="catalog-search-input"
+                type="text"
+                placeholder="Search products..."
+                className="input-field"
+                style={styles.catalogSearchInput}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <button 
+                onClick={() => setShowCustomModal(true)} 
+                className="btn btn-primary"
+                style={styles.customAddBtn}
+              >
+                + Custom Job
+              </button>
+            </div>
+          </div>
+
+          {/* Touch grid of products */}
+          <div style={styles.productGridContainer}>
+            {filteredProducts.length === 0 ? (
+              <div style={styles.emptyProducts}>No items matched the search parameters.</div>
+            ) : (
+              <div style={styles.productGrid}>
+                {filteredProducts.map(prod => (
+                  <div 
+                    key={prod.id} 
+                    onClick={() => handleAddProduct(prod)}
+                    style={styles.productCard}
+                    className="glass-panel animate-fade-in"
+                  >
+                    <div style={styles.prodName}>{prod.name}</div>
+                    <div style={styles.prodPrice}>{prod.price} LKR</div>
+                  </div>
+                ))}
+
+                {/* Grid Item for Custom Print Entry */}
+                <div 
+                  onClick={() => setShowCustomModal(true)}
+                  style={styles.customProductCard}
+                  className="glass-panel animate-fade-in"
+                >
+                  <div style={styles.customCardTitle}>+ Custom Print</div>
+                  <div style={styles.customCardSub}>Click to input specific dimensions & rates</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* NEW CUSTOMER REGISTRATION MODAL */}
+      {showCustModal && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel-elevated animate-fade-in" style={styles.modalCard}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Register Client Profile</h3>
+            </div>
+            <form onSubmit={handleCreateCustomer} style={styles.modalForm}>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Name *</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={newCustName}
+                  onChange={(e) => setNewCustName(e.target.value)}
+                  required 
+                />
+              </div>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Phone Number *</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={newCustPhone}
+                  onChange={(e) => setNewCustPhone(e.target.value)}
+                  required 
+                />
+              </div>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Email</label>
+                <input 
+                  type="email" 
+                  className="input-field" 
+                  value={newCustEmail}
+                  onChange={(e) => setNewCustEmail(e.target.value)}
+                />
+              </div>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Address</label>
+                <input 
+                  type="text" 
+                  className="input-field" 
+                  value={newCustAddress}
+                  onChange={(e) => setNewCustAddress(e.target.value)}
+                />
+              </div>
+              <div style={styles.modalBtnRow}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowCustModal(false)} 
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Create Client
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM PRINT JOB INPUT MODAL */}
+      {showCustomModal && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel-elevated animate-fade-in" style={styles.modalCard}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Specify Custom Print Job</h3>
+            </div>
+            <form onSubmit={handleAddCustomProduct} style={styles.modalForm}>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Job Description *</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Flex Print 12x4 Glossy"
+                  className="input-field" 
+                  value={customDesc}
+                  onChange={(e) => setCustomDesc(e.target.value)}
+                  required 
+                />
+              </div>
+
+              <div style={styles.formRow}>
+                <div style={{ ...styles.modalInputGroup, flex: 1 }}>
+                  <label style={styles.modalLabel}>Unit Price *</label>
+                  <input 
+                    type="number" 
+                    placeholder="Rate"
+                    min="0.01"
+                    step="0.01"
+                    className="input-field" 
+                    value={customPrice}
+                    onChange={(e) => setCustomPrice(e.target.value)}
+                    required 
+                  />
+                </div>
+
+                <div style={{ ...styles.modalInputGroup, flex: 1 }}>
+                  <label style={styles.modalLabel}>Quantity *</label>
+                  <input 
+                    type="number" 
+                    min="1"
+                    className="input-field" 
+                    value={customQty}
+                    onChange={(e) => setCustomQty(e.target.value)}
+                    required 
+                  />
+                </div>
+              </div>
+
+              <div style={styles.modalBtnRow}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowCustomModal(false)} 
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Add to Active Bill
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* IDLE PASSCODE LOCK SCREEN */}
+      {isLocked && (
+        <div style={styles.lockOverlay} className="no-print">
+          <div className="glass-panel-elevated animate-fade-in" style={styles.lockCard}>
+            <div style={styles.lockIconBox}>
+              <Clock size={36} style={{ color: "var(--accent-orange)" }} />
+            </div>
+            <h2 style={styles.lockTitle}>POS Locked due to Inactivity</h2>
+            <p style={styles.lockSubtitle}>
+              Please enter your security passcode to unlock this POS terminal session.
+            </p>
+            
+            {/* Passcode Input Field */}
+            <input 
+              ref={passcodeInputRef}
+              type="password"
+              placeholder="••••"
+              value={passcode}
+              onChange={(e) => {
+                setLockError("");
+                setPasscode(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleUnlock();
+                }
+              }}
+              style={styles.lockInput}
+            />
+
+            {lockError && (
+              <div style={styles.lockErrorText}>{lockError}</div>
+            )}
+
+            {/* Numeric Touch Keypad */}
+            <div style={styles.keypadGrid}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                <button
+                  key={num}
+                  onClick={() => {
+                    setLockError("");
+                    setPasscode(prev => prev + num);
+                  }}
+                  className="keypad-btn"
+                  style={styles.keypadBtn}
+                >
+                  {num}
+                </button>
+              ))}
+              
+              {/* Bottom row of keypad */}
+              <button
+                onClick={() => {
+                  setLockError("");
+                  setPasscode("");
+                }}
+                className="keypad-btn"
+                style={{ ...styles.keypadBtn, background: "rgba(239, 68, 68, 0.15)", color: "var(--accent-red)" }}
+              >
+                Clear
+              </button>
+              
+              <button
+                onClick={() => {
+                  setLockError("");
+                  setPasscode(prev => prev + "0");
+                }}
+                className="keypad-btn"
+                style={styles.keypadBtn}
+              >
+                0
+              </button>
+
+              <button
+                onClick={handleUnlock}
+                className="keypad-btn"
+                style={{ ...styles.keypadBtn, background: "rgba(34, 197, 94, 0.15)", color: "var(--accent-green)", fontWeight: "800" }}
+              >
+                Enter
+              </button>
+            </div>
+            
+            <p style={{ fontSize: "11px", color: "var(--text-subtle)", marginTop: "16px", textAlign: "center" }}>
+              Logged in as: {profile?.username} ({profile?.role}) | Default PIN: 1234
+            </p>
+            <button 
+              onClick={signOut}
+              className="btn btn-secondary"
+              style={{ width: "100%", marginTop: "12px", background: "rgba(239, 68, 68, 0.1)", borderColor: "rgba(239, 68, 68, 0.2)", color: "var(--accent-red)", justifyContent: "center" }}
+            >
+              Sign Out / Switch Account
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SELECT CLIENT DIALOG (First step, blocking catalog/billing) */}
+      {showSelectCustModal && !isLocked && (
+        <div style={styles.lockOverlay} className="no-print">
+          <div className="glass-panel-elevated animate-fade-in" style={styles.clientSelectCard}>
+            <div style={styles.clientSelectIconBox}>
+              <User size={32} style={{ color: "var(--primary)" }} />
+            </div>
+            <h2 style={styles.clientSelectTitle}>Select Client to Start Billing</h2>
+            <p style={styles.clientSelectSubtitle}>
+              Please select a registered customer profile, or continue as a Walk-in Customer to start adding items.
+            </p>
+            
+            {/* Search Input */}
+            <div style={{ ...styles.searchGroup, marginBottom: "16px", background: "rgba(15, 23, 42, 0.6)", padding: "0 10px" }}>
+              <Search size={16} style={styles.searchIcon} />
+              <input
+                id="customer-modal-search"
+                ref={customerSearchInputRef}
+                type="text"
+                placeholder="Search by client name or phone..."
+                className="input-field"
+                style={{ ...styles.searchInput, background: "none", border: "none" }}
+                value={customerSearchQuery}
+                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {/* Scrollable list of matches */}
+            <div style={styles.clientModalListScroll}>
+              {filteredCustomers.length === 0 ? (
+                <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-muted)" }}>
+                  No customer profiles found.
+                </div>
+              ) : (
+                filteredCustomers.map(cust => (
+                  <div
+                    key={cust.id}
+                    onClick={() => {
+                      setSelectedCustomer(cust);
+                      setShowSelectCustModal(false);
+                      setCustomerSearchQuery("");
+                    }}
+                    className="modal-cust-row"
+                    style={styles.modalCustRow}
+                  >
+                    <div>
+                      <div style={{ fontWeight: "700", color: "var(--text-main)" }}>{cust.name}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-subtle)", marginTop: "2px" }}>{cust.phone}</div>
+                    </div>
+                    {Number(cust.outstanding_balance || 0) > 0 && (
+                      <span style={styles.modalCustDebtBadge}>Debt: {Number(cust.outstanding_balance).toFixed(0)} LKR</span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Quick Actions Footer */}
+            <div style={styles.clientSelectFooter}>
+              <button
+                onClick={() => {
+                  const walkIn = customers.find(c => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("unknown"));
+                  if (walkIn) {
+                    setSelectedCustomer(walkIn);
+                  } else {
+                    setSelectedCustomer({ id: "walkin", name: "Walk-in Customer", phone: "0000000000", outstanding_balance: 0 });
+                  }
+                  setShowSelectCustModal(false);
+                }}
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: "12px", justifyContent: "center" }}
+              >
+                Walk-in Customer
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowCustModal(true);
+                }}
+                className="btn btn-primary"
+                style={{ padding: "12px 20px" }}
+              >
+                <Plus size={16} />
+                <span>New Profile</span>
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "12px", width: "100%" }}>
+              <Link 
+                href="/dashboard"
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: "8px", justifyContent: "center", fontSize: "12px" }}
+              >
+                Exit to Dashboard
+              </Link>
+              <button 
+                onClick={signOut}
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: "8px", justifyContent: "center", fontSize: "12px", color: "var(--accent-red)", borderColor: "rgba(239, 68, 68, 0.2)" }}
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ITEM DISCOUNT MODAL */}
+      {showDiscountModal && discountingItem && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel-elevated animate-fade-in" style={styles.modalCard}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Apply Item Discount</h3>
+              <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                {discountingItem.name} (Original: {discountingItem.price} LKR)
+              </p>
+            </div>
+            
+            <div style={styles.modalForm}>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Discount Type</label>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType("percentage")}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      background: discountType === "percentage" ? "var(--primary-glow)" : "var(--bg-surface-elevated)",
+                      border: "1px solid " + (discountType === "percentage" ? "var(--primary)" : "var(--border)"),
+                      color: "var(--text-main)",
+                      borderRadius: "var(--radius-sm)",
+                      fontWeight: "700",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Percentage (%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType("fixed")}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      background: discountType === "fixed" ? "var(--primary-glow)" : "var(--bg-surface-elevated)",
+                      border: "1px solid " + (discountType === "fixed" ? "var(--primary)" : "var(--border)"),
+                      color: "var(--text-main)",
+                      borderRadius: "var(--radius-sm)",
+                      fontWeight: "700",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Fixed Amount (LKR)
+                  </button>
+                </div>
+              </div>
+
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Discount Value</label>
+                <input
+                  id="item-discount-input"
+                  type="number"
+                  autoFocus
+                  placeholder={discountType === "percentage" ? "Enter % (e.g. 10)" : "Enter amount in LKR (e.g. 150)"}
+                  className="input-field"
+                  style={{ height: "40px", fontSize: "14px", width: "100%" }}
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (discountValue !== "" && Number(discountValue) >= 0) {
+                        handleApplyDiscount(discountingItem.id, discountType, discountValue);
+                        setShowDiscountModal(false);
+                      }
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Live Preview section */}
+              {discountValue && Number(discountValue) > 0 && (
+                <div className="glass-panel" style={{
+                  padding: "12px",
+                  background: "rgba(15, 23, 42, 0.4)",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--text-muted)" }}>Original Unit Price:</span>
+                    <span>{discountingItem.price} LKR</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--text-muted)" }}>Unit Price Reduction:</span>
+                    <span style={{ color: "var(--accent-orange)" }}>
+                      -{discountType === "percentage" 
+                        ? `${(discountingItem.price * (Number(discountValue) / 100)).toFixed(0)} LKR (${discountValue}%)` 
+                        : `${Number(discountValue).toFixed(0)} LKR`}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "6px", marginTop: "4px" }}>
+                    <span style={{ color: "var(--text-muted)", fontWeight: "700" }}>New Unit Price:</span>
+                    <strong style={{ color: "var(--accent-green)" }}>
+                      {Math.max(0, discountingItem.price - (discountType === "percentage" 
+                        ? discountingItem.price * (Number(discountValue) / 100) 
+                        : Number(discountValue))).toFixed(0)} LKR
+                    </strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--text-muted)" }}>Total for {discountingItem.qty} units:</span>
+                    <strong>
+                      {(discountingItem.qty * Math.max(0, discountingItem.price - (discountType === "percentage" 
+                        ? discountingItem.price * (Number(discountValue) / 100) 
+                        : Number(discountValue)))).toFixed(0)} LKR
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              <div style={styles.modalBtnRow}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowDiscountModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (discountValue !== "" && Number(discountValue) >= 0) {
+                      handleApplyDiscount(discountingItem.id, discountType, discountValue);
+                      setShowDiscountModal(false);
+                    }
+                  }}
+                  disabled={discountValue === "" || Number(discountValue) < 0}
+                >
+                  Apply Discount
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CASH PAYMENT CALCULATOR MODAL */}
+      {showCashCalcModal && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel-elevated animate-fade-in" style={{ ...styles.modalCard, maxWidth: "440px" }}>
+            <div style={styles.modalHeader}>
+              <h3 style={{ ...styles.modalTitle, display: "flex", alignItems: "center", gap: "8px", color: "var(--secondary)" }}>
+                💵 Cash & Change Calculator
+              </h3>
+              <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                Enter the amount received to calculate client change
+              </p>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                // Validate if amount received is valid for cash payments
+                if (paymentMethod === "cash" && Number(cashReceived || 0) < totalAmount) {
+                  const confirmPartial = window.confirm(`Amount received (${cashReceived} LKR) is less than the total invoice amount (${totalAmount.toFixed(0)} LKR). This will create an outstanding debt of ${(totalAmount - Number(cashReceived)).toFixed(0)} LKR. Do you want to proceed?`);
+                  if (!confirmPartial) return;
+                }
+                
+                // Set paidAmount state to cashReceived
+                if (paymentMethod === "cash") {
+                  setPaidAmount(cashReceived || "0");
+                } else if (paymentMethod === "bank_transfer") {
+                  setPaidAmount(totalAmount.toFixed(0));
+                } else {
+                  setPaidAmount("0");
+                }
+                
+                setShowCashCalcModal(false);
+                // Call checkout
+                await handleCheckout(false);
+              }}
+              style={styles.modalForm}
+            >
+              {/* Payment Method Selector inside Calculator */}
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Payment Method</label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  {[
+                    { id: "cash", label: "💵 Cash" },
+                    { id: "bank_transfer", label: "🏦 Transfer" },
+                    { id: "pending", label: "⏳ Pending" }
+                  ].map(m => {
+                    const isSelected = paymentMethod === m.id;
+                    const isWalkIn = !selectedCustomer || selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown");
+                    const isDisabled = m.id === "pending" && isWalkIn;
+                    
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          if (isDisabled) {
+                            alert("Pending payment requires a registered customer.");
+                            return;
+                          }
+                          setPaymentMethod(m.id);
+                          if (m.id === "cash") {
+                            setCashReceived(totalAmount.toFixed(0));
+                          } else if (m.id === "bank_transfer") {
+                            setCashReceived(totalAmount.toFixed(0));
+                          } else {
+                            setCashReceived("0");
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: "8px 4px",
+                          background: isSelected ? "var(--secondary-glow)" : "var(--bg-surface-elevated)",
+                          border: "1px solid " + (isSelected ? "var(--secondary)" : "var(--border)"),
+                          color: isSelected ? "var(--secondary)" : (isDisabled ? "rgba(255,255,255,0.2)" : "var(--text-main)"),
+                          borderRadius: "var(--radius-sm)",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          cursor: isDisabled ? "not-allowed" : "pointer",
+                          opacity: isDisabled ? 0.4 : 1
+                        }}
+                        disabled={isDisabled}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Total Row */}
+              <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 14px",
+                background: "rgba(99, 102, 241, 0.05)",
+                border: "1px solid rgba(99, 102, 241, 0.15)",
+                borderRadius: "var(--radius-sm)",
+                margin: "4px 0"
+              }}>
+                <span style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-muted)" }}>Total to Pay:</span>
+                <span style={{ fontSize: "20px", fontWeight: "800", color: "var(--secondary)" }}>
+                  {totalAmount.toFixed(0)} LKR
+                </span>
+              </div>
+
+              {paymentMethod === "cash" && (
+                <>
+                  {/* Cash Received Input */}
+                  <div style={styles.modalInputGroup}>
+                    <label style={styles.modalLabel}>Cash Received from Customer (LKR) *</label>
+                    <input
+                      id="cash-received-input"
+                      type="number"
+                      autoFocus
+                      required
+                      placeholder="0"
+                      className="input-field"
+                      style={{ height: "46px", fontSize: "18px", fontWeight: "800", width: "100%", color: "var(--text-main)", textAlign: "center" }}
+                      value={cashReceived}
+                      onChange={(e) => setCashReceived(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Quick Select Buttons */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px" }}>
+                    {[
+                      { label: "Exact", value: totalAmount },
+                      { label: "+100", value: Math.ceil(totalAmount / 100) * 100 },
+                      { label: "+500", value: Math.ceil(totalAmount / 500) * 500 },
+                      { label: "+1000", value: Math.ceil(totalAmount / 1000) * 1000 },
+                      { label: "5000", value: 5000 }
+                    ].map((btn, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setCashReceived(String(btn.value));
+                        }}
+                        style={{
+                          padding: "8px 2px",
+                          background: "var(--bg-surface-elevated)",
+                          border: "1px solid var(--border)",
+                          color: "var(--text-main)",
+                          borderRadius: "var(--radius-sm)",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Change output display */}
+                  {cashReceived && (
+                    <div style={{
+                      padding: "12px 16px",
+                      borderRadius: "var(--radius-sm)",
+                      background: Number(cashReceived) >= totalAmount ? "var(--accent-green-glow)" : "var(--accent-red-glow)",
+                      border: "1px solid " + (Number(cashReceived) >= totalAmount ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"),
+                      textAlign: "center",
+                      fontSize: "14px",
+                      fontWeight: "700",
+                      marginTop: "10px"
+                    }}>
+                      {Number(cashReceived) >= totalAmount ? (
+                        <div style={{ color: "var(--accent-green)" }}>
+                          <span>Change to Return: </span>
+                          <strong style={{ fontSize: "18px" }}>{(Number(cashReceived) - totalAmount).toFixed(0)} LKR</strong>
+                        </div>
+                      ) : (
+                        <div style={{ color: "var(--accent-orange)" }}>
+                          <span>Remaining Debt / Due: </span>
+                          <strong style={{ fontSize: "18px" }}>{(totalAmount - Number(cashReceived)).toFixed(0)} LKR</strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {paymentMethod === "bank_transfer" && (
+                <div style={{
+                  padding: "16px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "rgba(6, 182, 212, 0.05)",
+                  border: "1px solid rgba(6, 182, 212, 0.15)",
+                  color: "var(--secondary)",
+                  textAlign: "center",
+                  fontSize: "13px"
+                }}>
+                  🏦 Bank Transfer Selected: Customer will pay the exact amount via bank transfer. No cash change is needed.
+                </div>
+              )}
+
+              {paymentMethod === "pending" && (
+                <div style={{
+                  padding: "16px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "var(--accent-red-glow)",
+                  border: "1px solid rgba(239, 68, 68, 0.15)",
+                  color: "var(--accent-red)",
+                  textAlign: "center",
+                  fontSize: "13px"
+                }}>
+                  ⏳ Pending Payment: Invoice balance of <strong>{totalAmount.toFixed(0)} LKR</strong> will be recorded as outstanding debt under <strong>{selectedCustomer?.name}</strong>.
+                </div>
+              )}
+
+              <div style={styles.modalBtnRow}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowCashCalcModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ background: "var(--secondary)", borderColor: "var(--secondary)" }}
+                >
+                  {paymentMethod === "pending" ? "Submit Unpaid Order" : "Confirm & Checkout"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CHECKOUT SUCCESS OVERLAY */}
+      {completedOrder && (
+        <div style={styles.modalOverlay} className="no-print animate-fade-in">
+          <div className="glass-panel-elevated" style={{ ...styles.modalCard, maxWidth: "420px", textAlign: "center" }}>
+            <div style={{
+              width: "56px",
+              height: "56px",
+              borderRadius: "50%",
+              background: "var(--accent-green-glow)",
+              border: "1px solid rgba(74, 222, 128, 0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 16px auto",
+            }}>
+              <Check size={28} style={{ color: "var(--accent-green)" }} />
+            </div>
+
+            <h3 style={{ fontSize: "20px", fontWeight: "800", color: "var(--text-main)", marginBottom: "6px" }}>
+              Order Completed!
+            </h3>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "20px" }}>
+              Invoice has been registered in the system.
+            </p>
+
+            {/* Financial Details Box */}
+            <div className="glass-panel" style={{
+              padding: "16px",
+              background: "rgba(15, 23, 42, 0.4)",
+              borderRadius: "var(--radius-sm)",
+              textAlign: "left",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+              marginBottom: "24px",
+              fontSize: "13px"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--text-muted)" }}>Order Reference:</span>
+                <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{completedOrder.orderNum}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--text-muted)" }}>Customer Name:</span>
+                <span style={{ color: "var(--text-main)", fontWeight: "600" }}>{completedOrder.customerName}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", marginTop: "4px" }}>
+                <span style={{ color: "var(--text-muted)" }}>Total Due:</span>
+                <strong style={{ color: "var(--text-main)" }}>{completedOrder.total.toFixed(0)} LKR</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--text-muted)" }}>Paid amount:</span>
+                <strong style={{ color: "var(--accent-green)" }}>{completedOrder.paid.toFixed(0)} LKR</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--text-muted)" }}>Balance outstanding:</span>
+                <strong style={{ color: completedOrder.balance > 0 ? "var(--accent-orange)" : "var(--accent-green)" }}>
+                  {completedOrder.balance.toFixed(0)} LKR
+                </strong>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const printWindow = window.open(`/orders/${completedOrder.orderId}/print`, "_blank");
+                  if (printWindow) printWindow.focus();
+                }}
+                className="btn btn-primary"
+                style={{ width: "100%", justifyContent: "center", gap: "8px", padding: "12px", background: "var(--primary)" }}
+              >
+                <Printer size={18} />
+                <span>Print Invoice Slip</span>
+              </button>
+
+              {completedOrder.waLink && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.open(completedOrder.waLink, "_blank");
+                  }}
+                  className="btn btn-secondary"
+                  style={{ 
+                    width: "100%", 
+                    justifyContent: "center", 
+                    gap: "8px", 
+                    padding: "12px",
+                    background: "rgba(34, 197, 94, 0.08)", 
+                    borderColor: "rgba(34, 197, 94, 0.2)", 
+                    color: "hsl(142, 70%, 50%)" 
+                  }}
+                >
+                  <Send size={14} />
+                  <span>Resend WhatsApp</span>
+                </button>
+              )}
+
+              <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompletedOrder(null);
+                    setCart([]);
+                    setPaidAmount("");
+                    setSelectedCartItemId(null);
+                    setSelectedCustomer(null);
+                    setShowSelectCustModal(true);
+                  }}
+                  className="btn btn-secondary"
+                  style={{ flex: 1, padding: "10px", justifyContent: "center", fontSize: "13px" }}
+                >
+                  New Order
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompletedOrder(null);
+                    router.push("/orders");
+                  }}
+                  className="btn btn-secondary"
+                  style={{ flex: 1, padding: "10px", justifyContent: "center", fontSize: "13px" }}
+                >
+                  View Details
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const styles = {
+  posWrapper: {
+    height: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    position: "relative",
+    padding: "16px",
+    boxSizing: "border-box",
+  },
+  notificationOverlay: {
+    position: "absolute",
+    top: 10,
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 150,
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    width: "100%",
+    maxWidth: "400px",
+  },
+  successBanner: {
+    background: "var(--accent-green-glow)",
+    color: "var(--accent-green)",
+    border: "1px solid rgba(74, 222, 128, 0.2)",
+    padding: "10px 16px",
+    borderRadius: "var(--radius-sm)",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "13px",
+    fontWeight: "600",
+    boxShadow: "var(--glass-shadow)",
+  },
+  errorBanner: {
+    background: "var(--accent-red-glow)",
+    color: "var(--accent-red)",
+    border: "1px solid rgba(239, 68, 68, 0.2)",
+    padding: "10px 16px",
+    borderRadius: "var(--radius-sm)",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "13px",
+    fontWeight: "600",
+    boxShadow: "var(--glass-shadow)",
+  },
+  posGrid: {
+    display: "grid",
+    gridTemplateColumns: "380px 1fr",
+    gap: "16px",
+    height: "100%",
+    overflow: "hidden",
+    "@media (maxWidth: 991px)": {
+      gridTemplateColumns: "1fr",
+    }
+  },
+  // LEFT PANEL STYLES
+  leftPanel: {
+    display: "flex",
+    flexDirection: "column",
+    height: "100%",
+    overflow: "hidden",
+    padding: "12px",
+    background: "rgba(11, 15, 25, 0.8)",
+  },
+  cartHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottom: "1px solid var(--border)",
+    paddingBottom: "12px",
+    marginBottom: "8px",
+  },
+  cartHeaderTitle: {
+    fontSize: "15px",
+    fontWeight: "700",
+    color: "var(--text-main)",
+  },
+  cartActionBtn: {
+    background: "var(--bg-surface-elevated)",
+    border: "1px solid var(--border)",
+    color: "var(--text-main)",
+    padding: "6px 12px",
+    fontSize: "12px",
+    fontWeight: "600",
+    borderRadius: "var(--radius-sm)",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    cursor: "pointer",
+    transition: "var(--transition-fast)",
+  },
+  cartActionBtnRed: {
+    background: "rgba(239, 68, 68, 0.1)",
+    border: "1px solid rgba(239, 68, 68, 0.2)",
+    color: "hsl(350, 80%, 65%)",
+    padding: "6px 12px",
+    fontSize: "12px",
+    fontWeight: "600",
+    borderRadius: "var(--radius-sm)",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    cursor: "pointer",
+    transition: "var(--transition-fast)",
+  },
+  cartItemsScroll: {
+    flex: 1,
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    paddingRight: "4px",
+    marginBottom: "12px",
+  },
+  emptyCartPlaceholder: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    padding: "40px 20px",
+    color: "var(--text-subtle)",
+    fontSize: "13px",
+  },
+  cartRow: {
+    padding: "12px 14px",
+    borderRadius: "var(--radius-sm)",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "var(--border)",
+    background: "rgba(255, 255, 255, 0.02)",
+    cursor: "pointer",
+    transition: "var(--transition-fast)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+  },
+  cartRowSelected: {
+    background: "var(--primary-glow)",
+    borderColor: "var(--primary)",
+  },
+  cartRowHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  cartRowName: {
+    fontWeight: "700",
+    fontSize: "14px",
+    color: "var(--text-main)",
+  },
+  cartRowQty: {
+    fontSize: "13px",
+    fontWeight: "700",
+    background: "var(--bg-surface-elevated)",
+    color: "var(--primary)",
+    padding: "2px 8px",
+    borderRadius: "var(--radius-sm)",
+  },
+  cartRowDetails: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: "12px",
+    color: "var(--text-muted)",
+  },
+  cartRowTotal: {
+    fontWeight: "600",
+    color: "var(--text-main)",
+  },
+  rowControls: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: "8px",
+    paddingTop: "8px",
+    borderTop: "1px dashed rgba(255,255,255,0.08)",
+  },
+  controlBtn: {
+    background: "var(--bg-surface-elevated)",
+    border: "1px solid var(--border)",
+    color: "var(--text-main)",
+    width: "28px",
+    height: "28px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "var(--radius-sm)",
+    cursor: "pointer",
+  },
+  controlLabel: {
+    fontSize: "11px",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    color: "var(--primary)",
+  },
+  controlQtyInput: {
+    background: "rgba(15, 23, 42, 0.4)",
+    border: "1px solid var(--border)",
+    color: "var(--text-main)",
+    width: "48px",
+    height: "28px",
+    textAlign: "center",
+    borderRadius: "var(--radius-sm)",
+    fontSize: "12px",
+    fontWeight: "600",
+    outline: "none",
+    margin: "0 6px",
+  },
+  cartTotalsBox: {
+    borderTop: "1px solid var(--border)",
+    paddingTop: "12px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    marginBottom: "12px",
+  },
+  totalRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: "13px",
+    color: "var(--text-muted)",
+  },
+  grandTotalRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: "16px",
+    fontWeight: "800",
+    color: "var(--text-main)",
+    borderTop: "1px dashed var(--border)",
+    paddingTop: "8px",
+    marginTop: "4px",
+  },
+  methodSelectorBox: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    marginTop: "8px",
+  },
+  methodButtons: {
+    display: "flex",
+    gap: "6px",
+    width: "100%",
+  },
+  methodBtn: {
+    flex: 1,
+    height: "32px",
+    background: "rgba(255, 255, 255, 0.03)",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "var(--border)",
+    color: "var(--text-muted)",
+    fontSize: "12px",
+    fontWeight: "600",
+    borderRadius: "var(--radius-sm)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "var(--transition-fast)",
+  },
+  methodBtnActive: {
+    color: "#ffffff",
+    background: "var(--primary-glow)",
+    borderColor: "var(--primary)",
+  },
+  methodBtnDisabled: {
+    opacity: 0.25,
+    cursor: "not-allowed",
+  },
+  settleInputContainer: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
+    marginTop: "8px",
+  },
+  settleLabel: {
+    fontSize: "12px",
+    fontWeight: "700",
+    color: "var(--text-muted)",
+  },
+  settleInput: {
+    flex: 1,
+    height: "36px",
+    padding: "0 10px",
+    background: "rgba(0,0,0,0.3)",
+    border: "1px solid var(--border)",
+    color: "var(--text-main)",
+    borderRadius: "var(--radius-sm)",
+    outline: "none",
+    fontWeight: "700",
+    textAlign: "right",
+  },
+  balanceRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: "13px",
+    fontWeight: "700",
+    marginTop: "2px",
+  },
+  cartFooter: {
+    display: "flex",
+    gap: "6px",
+  },
+  voidBtn: {
+    flex: 1.2,
+    fontSize: "12px",
+    padding: "10px 0",
+    height: "38px",
+    gap: "4px",
+  },
+  quoteBtn: {
+    flex: 1.5,
+    fontSize: "12px",
+    padding: "10px 0",
+    height: "38px",
+    gap: "4px",
+  },
+  payBtn: {
+    flex: 1.8,
+    fontSize: "12px",
+    padding: "10px 0",
+    height: "38px",
+    background: "var(--accent-green)",
+    gap: "4px",
+  },
+  // RIGHT PANEL STYLES
+  rightPanel: {
+    display: "flex",
+    flexDirection: "column",
+    height: "100%",
+    overflow: "hidden",
+    gap: "12px",
+  },
+  clientBar: {
+    padding: "12px 16px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    position: "relative",
+  },
+  clientSelector: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  clientBadge: {
+    fontSize: "14px",
+    fontWeight: "600",
+  },
+  clientNameText: {
+    color: "var(--text-main)",
+  },
+  clientPhoneText: {
+    color: "var(--text-subtle)",
+  },
+  outstandingText: {
+    color: "var(--accent-orange)",
+  },
+  noClientText: {
+    fontSize: "13px",
+    color: "var(--text-subtle)",
+  },
+  clientActions: {
+    display: "flex",
+    gap: "8px",
+  },
+  smallActionBtn: {
+    padding: "4px 8px",
+    fontSize: "11px",
+    height: "28px",
+  },
+  custSearchOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: "var(--bg-surface)",
+    zIndex: 20,
+    borderRadius: "var(--radius-md)",
+    padding: "6px 12px",
+    display: "flex",
+    alignItems: "center",
+  },
+  custSearchBar: {
+    position: "relative",
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+  },
+  custSearchIcon: {
+    position: "absolute",
+    left: "12px",
+    color: "var(--text-subtle)",
+  },
+  custSearchInput: {
+    height: "32px",
+    paddingLeft: "32px",
+    fontSize: "13px",
+  },
+  custResultsDrop: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    maxHeight: "180px",
+    overflowY: "auto",
+    padding: "6px 0",
+  },
+  custResultRow: {
+    padding: "8px 16px",
+    cursor: "pointer",
+    fontSize: "13px",
+    borderBottom: "1px solid rgba(255,255,255,0.02)",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    "&:hover": {
+      backgroundColor: "rgba(255,255,255,0.03)",
+    }
+  },
+  emptyResultsMsg: {
+    padding: "12px",
+    textAlign: "center",
+    color: "var(--text-subtle)",
+    fontSize: "12px",
+  },
+  operationsBar: {
+    padding: "12px 16px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+  categoryFilters: {
+    display: "flex",
+    gap: "8px",
+    overflowX: "auto",
+    paddingBottom: "2px",
+  },
+  categoryTab: {
+    background: "none",
+    border: "none",
+    color: "var(--text-muted)",
+    padding: "6px 12px",
+    fontSize: "13px",
+    fontWeight: "600",
+    cursor: "pointer",
+    borderRadius: "var(--radius-sm)",
+    transition: "var(--transition-fast)",
+    whiteSpace: "nowrap",
+    "&:hover": {
+      color: "var(--text-main)",
+      backgroundColor: "rgba(255,255,255,0.02)",
+    }
+  },
+  categoryTabActive: {
+    color: "var(--text-main)",
+    backgroundColor: "var(--primary-glow)",
+    borderLeft: "2px solid var(--primary)",
+  },
+  catalogSearchBar: {
+    display: "flex",
+    alignItems: "center",
+    position: "relative",
+    gap: "10px",
+  },
+  catalogSearchIcon: {
+    position: "absolute",
+    left: "14px",
+    color: "var(--text-subtle)",
+  },
+  catalogSearchInput: {
+    paddingLeft: "40px",
+    height: "38px",
+    flex: 1,
+  },
+  customAddBtn: {
+    height: "38px",
+    padding: "0 14px",
+    fontSize: "13px",
+    gap: "4px",
+  },
+  productGridContainer: {
+    flex: 1,
+    overflowY: "auto",
+  },
+  emptyProducts: {
+    padding: "60px",
+    textAlign: "center",
+    color: "var(--text-subtle)",
+  },
+  productGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+    gap: "12px",
+    paddingBottom: "12px",
+  },
+  productCard: {
+    padding: "20px 16px",
+    borderRadius: "var(--radius-md)",
+    cursor: "pointer",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    minHeight: "110px",
+    background: "rgba(15,23,42,0.4)",
+    border: "1px solid var(--border)",
+    transition: "var(--transition-fast)",
+    "&:hover": {
+      borderColor: "var(--primary)",
+      transform: "translateY(-1px)",
+      boxShadow: "0 4px 12px 0 var(--primary-glow)",
+    }
+  },
+  prodName: {
+    fontWeight: "700",
+    fontSize: "14px",
+    color: "var(--text-main)",
+  },
+  prodPrice: {
+    fontSize: "13px",
+    color: "var(--secondary)",
+    fontWeight: "700",
+    marginTop: "8px",
+    alignSelf: "flex-end",
+  },
+  customProductCard: {
+    padding: "20px 16px",
+    borderRadius: "var(--radius-md)",
+    cursor: "pointer",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: "110px",
+    border: "1px dashed var(--primary)",
+    background: "rgba(99, 102, 241, 0.03)",
+    textAlign: "center",
+    transition: "var(--transition-fast)",
+    "&:hover": {
+      background: "var(--primary-glow)",
+      borderColor: "var(--primary)",
+    }
+  },
+  customCardTitle: {
+    fontWeight: "700",
+    fontSize: "14px",
+    color: "var(--primary)",
+  },
+  customCardSub: {
+    fontSize: "11px",
+    color: "var(--text-subtle)",
+    marginTop: "6px",
+  },
+  // MODAL COMMON STYLES
+  modalOverlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    backdropFilter: "blur(6px)",
+    zIndex: 200,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "20px",
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: "480px",
+    padding: "30px",
+  },
+  modalHeader: {
+    marginBottom: "20px",
+    borderBottom: "1px solid var(--border)",
+    paddingBottom: "10px",
+  },
+  modalTitle: {
+    fontSize: "20px",
+    fontWeight: "700",
+  },
+  modalForm: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+  },
+  modalInputGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+  },
+  modalLabel: {
+    fontSize: "12px",
+    fontWeight: "600",
+    color: "var(--text-muted)",
+  },
+  formRow: {
+    display: "flex",
+    gap: "16px",
+  },
+  modalBtnRow: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "10px",
+    marginTop: "10px",
+  },
+  lockOverlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(3, 7, 18, 0.85)",
+    backdropFilter: "blur(20px)",
+    zIndex: 200,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "20px",
+  },
+  lockCard: {
+    background: "var(--bg-glass)",
+    border: "1px solid var(--border)",
+    padding: "36px 30px",
+    borderRadius: "var(--radius-lg)",
+    maxWidth: "340px",
+    width: "100%",
+    boxShadow: "var(--glass-shadow)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+  },
+  lockIconBox: {
+    width: "60px",
+    height: "60px",
+    borderRadius: "50%",
+    background: "rgba(251, 146, 60, 0.1)",
+    border: "1px solid rgba(251, 146, 60, 0.2)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: "20px",
+  },
+  lockTitle: {
+    fontSize: "18px",
+    fontWeight: "800",
+    color: "var(--text-main)",
+    textAlign: "center",
+    marginBottom: "8px",
+  },
+  lockSubtitle: {
+    fontSize: "12px",
+    color: "var(--text-muted)",
+    textAlign: "center",
+    marginBottom: "24px",
+    lineHeight: "1.4",
+  },
+  lockInput: {
+    width: "100%",
+    padding: "12px",
+    background: "rgba(15, 23, 42, 0.6)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+    color: "var(--text-main)",
+    fontSize: "20px",
+    letterSpacing: "8px",
+    textAlign: "center",
+    outline: "none",
+    marginBottom: "16px",
+    fontFamily: "monospace",
+  },
+  lockErrorText: {
+    fontSize: "12px",
+    color: "var(--accent-red)",
+    marginBottom: "16px",
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  keypadGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: "10px",
+    width: "100%",
+  },
+  keypadBtn: {
+    background: "var(--bg-surface-elevated)",
+    border: "1px solid var(--border)",
+    color: "var(--text-main)",
+    padding: "14px",
+    fontSize: "18px",
+    fontWeight: "700",
+    borderRadius: "var(--radius-sm)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "var(--transition-fast)",
+  },
+  clientSelectCard: {
+    background: "var(--bg-glass)",
+    border: "1px solid var(--border)",
+    padding: "30px",
+    borderRadius: "var(--radius-lg)",
+    maxWidth: "460px",
+    width: "100%",
+    boxShadow: "var(--glass-shadow)",
+    display: "flex",
+    flexDirection: "column",
+  },
+  clientSelectIconBox: {
+    width: "56px",
+    height: "56px",
+    borderRadius: "50%",
+    background: "rgba(99, 102, 241, 0.1)",
+    border: "1px solid rgba(99, 102, 241, 0.2)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: "16px",
+    alignSelf: "center",
+  },
+  clientSelectTitle: {
+    fontSize: "18px",
+    fontWeight: "800",
+    color: "var(--text-main)",
+    textAlign: "center",
+    marginBottom: "8px",
+  },
+  clientSelectSubtitle: {
+    fontSize: "12px",
+    color: "var(--text-muted)",
+    textAlign: "center",
+    marginBottom: "20px",
+    lineHeight: "1.4",
+  },
+  clientModalListScroll: {
+    maxHeight: "200px",
+    overflowY: "auto",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+    background: "rgba(15, 23, 42, 0.4)",
+    marginBottom: "20px",
+  },
+  modalCustRow: {
+    padding: "10px 14px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottom: "1px solid var(--border)",
+    cursor: "pointer",
+    transition: "var(--transition-fast)",
+  },
+  modalCustDebtBadge: {
+    fontSize: "10px",
+    fontWeight: "700",
+    background: "var(--accent-orange-glow)",
+    color: "var(--accent-orange)",
+    padding: "2px 8px",
+    borderRadius: "var(--radius-full)",
+    border: "1px solid rgba(251, 146, 60, 0.2)",
+  },
+  clientSelectFooter: {
+    display: "flex",
+    gap: "12px",
+  },
+};
