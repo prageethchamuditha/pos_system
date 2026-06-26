@@ -19,7 +19,10 @@ import {
   Plus,
   Printer,
   Lock,
-  Trash2
+  Trash2,
+  Pencil,
+  Check,
+  X
 } from "lucide-react";
 
 export default function CustomersPage() {
@@ -46,6 +49,14 @@ export default function CustomersPage() {
   // Passcode Edit States
   const [isEditingPasscode, setIsEditingPasscode] = useState(false);
   const [newPasscode, setNewPasscode] = useState("");
+
+  // Profile Edit States
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -235,6 +246,55 @@ export default function CustomersPage() {
       setSuccessMsg(`Passcode reset to '1234' for ${selectedCust.name}!`);
     } catch (err) {
       setErrorMsg(err.message || "Failed to reset passcode.");
+    }
+  };
+
+  const handleStartEditProfile = () => {
+    setEditName(selectedCust.name);
+    setEditPhone(selectedCust.phone);
+    setEditEmail(selectedCust.email || "");
+    setEditAddress(selectedCust.address || "");
+    setIsEditingProfile(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim() || !editPhone.trim()) {
+      setErrorMsg("Name and phone number are required.");
+      return;
+    }
+    setSavingProfile(true);
+    setErrorMsg("");
+    try {
+      const { error } = await supabase
+        .from("customers")
+        .update({
+          name: editName.trim(),
+          phone: editPhone.trim(),
+          email: editEmail.trim() || null,
+          address: editAddress.trim() || null,
+        })
+        .eq("id", selectedCust.id);
+
+      if (error) throw error;
+
+      const updatedCust = {
+        ...selectedCust,
+        name: editName.trim(),
+        phone: editPhone.trim(),
+        email: editEmail.trim() || null,
+        address: editAddress.trim() || null,
+      };
+      setSelectedCust(updatedCust);
+      setCustomers(prev => prev.map(c => c.id === selectedCust.id ? updatedCust : c));
+      setIsEditingProfile(false);
+      setSuccessMsg("Client profile updated successfully!");
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to update client profile.");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -534,7 +594,7 @@ export default function CustomersPage() {
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", gap: "8px" }}>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     <button
                       onClick={() => window.open(`/customers/${selectedCust.id}/print`, "_blank")}
                       className="btn btn-secondary"
@@ -542,6 +602,15 @@ export default function CustomersPage() {
                     >
                       <Printer size={14} />
                       <span>Print Statement</span>
+                    </button>
+
+                    <button
+                      onClick={handleStartEditProfile}
+                      className="btn btn-secondary"
+                      style={{ height: "36px", padding: "0 14px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px", borderColor: "rgba(99,102,241,0.4)", color: "var(--primary)", background: "rgba(99,102,241,0.06)" }}
+                    >
+                      <Pencil size={14} />
+                      <span>Edit Profile</span>
                     </button>
 
                     {isAuthorized && (
@@ -600,34 +669,116 @@ export default function CustomersPage() {
                   </div>
                 </div>
 
-                {/* Personal Information */}
+                {/* Contact & Billing Data */}
                 <div style={styles.sectionCard}>
-                  <h3 style={styles.sectionTitle}>Contact & Billing Data</h3>
-                  <div style={styles.infoGrid}>
-                    <div style={styles.infoItem}>
-                      <Phone size={14} style={styles.infoIcon} />
-                      <div>
-                        <div style={styles.infoLabel}>Phone Number</div>
-                        <div style={styles.infoValue}>{selectedCust.phone}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <h3 style={{ ...styles.sectionTitle, marginBottom: 0 }}>Contact &amp; Billing Data</h3>
+                    {!isEditingProfile ? (
+                      <button
+                        onClick={handleStartEditProfile}
+                        style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", borderRadius: "6px" }}
+                      >
+                        <Pencil size={12} /> Edit
+                      </button>
+                    ) : (
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          onClick={handleSaveProfile}
+                          disabled={savingProfile}
+                          className="btn btn-primary"
+                          style={{ padding: "4px 12px", fontSize: "12px", height: "auto", display: "flex", alignItems: "center", gap: "4px" }}
+                        >
+                          <Check size={12} />{savingProfile ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          onClick={() => setIsEditingProfile(false)}
+                          className="btn btn-secondary"
+                          style={{ padding: "4px 10px", fontSize: "12px", height: "auto", display: "flex", alignItems: "center", gap: "4px" }}
+                        >
+                          <X size={12} /> Cancel
+                        </button>
                       </div>
-                    </div>
-
-                    <div style={styles.infoItem}>
-                      <Mail size={14} style={styles.infoIcon} />
-                      <div>
-                        <div style={styles.infoLabel}>Email Address</div>
-                        <div style={styles.infoValue}>{selectedCust.email || "No Email Logged"}</div>
-                      </div>
-                    </div>
-
-                    <div style={styles.infoItem}>
-                      <MapPin size={14} style={styles.infoIcon} />
-                      <div>
-                        <div style={styles.infoLabel}>Location Address</div>
-                        <div style={styles.infoValue}>{selectedCust.address || "No Address Logged"}</div>
-                      </div>
-                    </div>
+                    )}
                   </div>
+
+                  {isEditingProfile ? (
+                    /* Edit Mode */
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                        <div>
+                          <label style={{ ...styles.infoLabel, marginBottom: "4px", display: "block" }}>Full Name *</label>
+                          <input
+                            type="text"
+                            className="input-field"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            placeholder="Full Name"
+                            style={{ width: "100%" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ ...styles.infoLabel, marginBottom: "4px", display: "block" }}>Phone Number *</label>
+                          <input
+                            type="text"
+                            className="input-field"
+                            value={editPhone}
+                            onChange={(e) => setEditPhone(e.target.value)}
+                            placeholder="e.g. 0771234567"
+                            style={{ width: "100%" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ ...styles.infoLabel, marginBottom: "4px", display: "block" }}>Email Address</label>
+                          <input
+                            type="email"
+                            className="input-field"
+                            value={editEmail}
+                            onChange={(e) => setEditEmail(e.target.value)}
+                            placeholder="e.g. john@example.com"
+                            style={{ width: "100%" }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ ...styles.infoLabel, marginBottom: "4px", display: "block" }}>Billing Address</label>
+                          <input
+                            type="text"
+                            className="input-field"
+                            value={editAddress}
+                            onChange={(e) => setEditAddress(e.target.value)}
+                            placeholder="e.g. 123 Main St, Colombo"
+                            style={{ width: "100%" }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* View Mode */
+                    <div style={styles.infoGrid}>
+                      <div style={styles.infoItem}>
+                        <Phone size={14} style={styles.infoIcon} />
+                        <div>
+                          <div style={styles.infoLabel}>Phone Number</div>
+                          <div style={styles.infoValue}>{selectedCust.phone}</div>
+                        </div>
+                      </div>
+
+                      <div style={styles.infoItem}>
+                        <Mail size={14} style={styles.infoIcon} />
+                        <div>
+                          <div style={styles.infoLabel}>Email Address</div>
+                          <div style={styles.infoValue}>{selectedCust.email || "No Email Logged"}</div>
+                        </div>
+                      </div>
+
+                      <div style={styles.infoItem}>
+                        <MapPin size={14} style={styles.infoIcon} />
+                        <div>
+                          <div style={styles.infoLabel}>Location Address</div>
+                          <div style={styles.infoValue}>{selectedCust.address || "No Address Logged"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Portal Access Credentials */}
