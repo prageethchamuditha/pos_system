@@ -370,24 +370,21 @@ export default function OrdersPage() {
       `*Amount Paid:* ${Number(order.paid_amount).toFixed(0)} LKR\n` +
       `*Remaining Balance:* ${Number(order.balance_amount).toFixed(0)} LKR\n\n` +
       `*Your Total Outstanding Debt:* ${Number(cust.outstanding_balance || 0).toFixed(0)} LKR\n\n` +
-      `You can view/print your official receipt here:\n` +
+      `You can view your official receipt here:\n` +
       `${receiptUrl}\n\n` +
       `Thank you for your business! 🙏`;
 
     const waUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
 
-    // 1. Open the PDF/print tab
-    const printWindow = window.open(`/orders/${order.id}/print`, "_blank");
-    if (printWindow) {
-      printWindow.focus();
-    }
+    // Open WhatsApp FIRST (directly from user click — browser allows this)
+    window.open(waUrl, "_blank");
 
-    // 2. Open WhatsApp Web on approval
+    // Optionally open the print/invoice tab after a short delay
     setTimeout(() => {
-      if (window.confirm("Invoice print screen opened to save as PDF. Click 'OK' to open WhatsApp chat and send the link, then drag/attach the PDF file.")) {
-        window.open(waUrl, "_blank");
+      if (window.confirm("WhatsApp opened! \nDo you also want to open the invoice page to save it as PDF?")) {
+        window.open(`/orders/${order.id}/print`, "_blank");
       }
-    }, 500);
+    }, 600);
   };
 
   // Filters logic
