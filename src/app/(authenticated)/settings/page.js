@@ -68,7 +68,9 @@ export default function SettingsPage() {
     For any issues, inquiries, or assistance, please contact us at +94 70 143 49 49. We are happy to help.
 
 :) Thank you for choosing Print X!`,
-    footerInfo: ""
+    footerInfo: "",
+    orderPrefix: "ORD",
+    orderStartNumber: 1
   });
 
   // User Management State
@@ -799,7 +801,48 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <h3 style={styles.subSubTitle}>Invoice Footer & Terms</h3>
+                {/* Bill Number Series — Owner Only */}
+                {profile?.role === "owner" && (
+                  <>
+                    <h3 style={styles.subSubTitle}>Bill Number Series</h3>
+                    <div style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: "10px", padding: "16px 18px", marginBottom: "18px" }}>
+                      <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "14px" }}>
+                        Configure the prefix and starting number for invoices. Bills will be formatted as <strong style={{ color: "var(--primary)" }}>{shopSettings.orderPrefix || "ORD"}-{new Date().getFullYear()}-XXXX</strong>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                        <div style={styles.inputGroup}>
+                          <label style={styles.label}>Bill Prefix</label>
+                          <input
+                            type="text"
+                            className="input-field"
+                            placeholder="e.g. ORD, INV, PX"
+                            maxLength={8}
+                            value={shopSettings.orderPrefix}
+                            onChange={(e) => setShopSettings({ ...shopSettings, orderPrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })}
+                          />
+                          <span style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px", display: "block" }}>Letters &amp; numbers only</span>
+                        </div>
+                        <div style={styles.inputGroup}>
+                          <label style={styles.label}>Start Number (this year)</label>
+                          <input
+                            type="number"
+                            className="input-field"
+                            placeholder="e.g. 1, 150"
+                            min={1}
+                            value={shopSettings.orderStartNumber}
+                            onChange={(e) => setShopSettings({ ...shopSettings, orderStartNumber: Math.max(1, parseInt(e.target.value) || 1) })}
+                          />
+                          <span style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px", display: "block" }}>Next bill will count from this number</span>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: "12px", padding: "10px 14px", background: "rgba(0,0,0,0.15)", borderRadius: "7px", fontFamily: "monospace", fontSize: "13px", color: "var(--accent-green)", letterSpacing: "0.05em" }}>
+                        Preview: <strong>{shopSettings.orderPrefix || "ORD"}-{new Date().getFullYear()}-{String(shopSettings.orderStartNumber || 1).padStart(4, "0")}</strong>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <h3 style={styles.subSubTitle}>Invoice Footer &amp; Terms</h3>
                 
                 <div style={styles.inputGroup}>
                   <label style={styles.label}>Invoice Footer Text</label>

@@ -584,7 +584,16 @@ export default function POSPage() {
 
     try {
       const date = new Date();
-      const yearMonth = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, "0")}`;
+      const year = date.getFullYear();
+
+      // Load bill series settings
+      let orderPrefix = "ORD";
+      let orderStartNumber = 1;
+      try {
+        const s = JSON.parse(localStorage.getItem("printx_shop_settings") || "{}");
+        if (s.orderPrefix) orderPrefix = s.orderPrefix;
+        if (s.orderStartNumber) orderStartNumber = Math.max(1, parseInt(s.orderStartNumber) || 1);
+      } catch (_) {}
 
       // Resolve Customer to Use (default to Walk-in Customer if none selected)
       let customerToUse = selectedCustomer;
@@ -619,14 +628,14 @@ export default function POSPage() {
       }
 
       if (isQuotation) {
-        // 1. Generate Quotation ID
+        // 1. Generate Quotation ID (count all quotations this year)
         const { data: countData } = await supabase
           .from("quotations")
           .select("id")
-          .gte("created_at", new Date(date.getFullYear(), date.getMonth(), 1).toISOString());
+          .gte("created_at", new Date(year, 0, 1).toISOString());
 
-        const seq = ((countData?.length || 0) + 1).toString().padStart(4, "0");
-        const quotationNum = `QT-${yearMonth}-${seq}`;
+        const seq = ((countData?.length || 0) + orderStartNumber).toString().padStart(4, "0");
+        const quotationNum = `QT-${year}-${seq}`;
 
         // 2. Insert Quotation
         const { data: quotation, error: qError } = await supabase
@@ -663,14 +672,14 @@ export default function POSPage() {
         }, 1500);
 
       } else {
-        // 1. Generate Order ID
+        // 1. Generate Order ID (count all orders this year)
         const { data: countData } = await supabase
           .from("orders")
           .select("id")
-          .gte("created_at", new Date(date.getFullYear(), date.getMonth(), 1).toISOString());
+          .gte("created_at", new Date(year, 0, 1).toISOString());
 
-        const seq = ((countData?.length || 0) + 1).toString().padStart(4, "0");
-        const orderNum = `PX-${yearMonth}-${seq}`;
+        const seq = ((countData?.length || 0) + orderStartNumber).toString().padStart(4, "0");
+        const orderNum = `${orderPrefix}-${year}-${seq}`;
 
         // 2. Insert Order
         const { data: order, error: oError } = await supabase
