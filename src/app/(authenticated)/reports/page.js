@@ -16,7 +16,9 @@ import {
   Search,
   FileText,
   Percent,
-  Download
+  Download,
+  AlertTriangle,
+  AlertCircle
 } from "lucide-react";
 
 export default function ReportsPage() {
@@ -239,10 +241,14 @@ export default function ReportsPage() {
     setEndDate(end);
   };
 
+  // Filter out voided orders for active calculations
+  const activeOrders = orders.filter(o => o.status !== "voided");
+  const voidedOrders = orders.filter(o => o.status === "voided");
+
   // Financial aggregates
-  const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-  const totalCollected = orders.reduce((sum, o) => sum + Number(o.paid_amount || 0), 0);
-  const totalOutstanding = orders.reduce((sum, o) => sum + Number(o.balance_amount || 0), 0);
+  const totalRevenue = activeOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+  const totalCollected = activeOrders.reduce((sum, o) => sum + Number(o.paid_amount || 0), 0);
+  const totalOutstanding = activeOrders.reduce((sum, o) => sum + Number(o.balance_amount || 0), 0);
   
   // Standard print shop margin assumptions: 
   // 55% Cost of Materials & operations, 45% Net Profit Margin
@@ -251,7 +257,7 @@ export default function ReportsPage() {
 
   // Daily summary logic
   const dailySummary = {};
-  orders.forEach(o => {
+  activeOrders.forEach(o => {
     const dateKey = o.created_at.split("T")[0];
     if (!dailySummary[dateKey]) {
       dailySummary[dateKey] = { date: dateKey, revenue: 0, collected: 0, pending: 0, ordersCount: 0 };
@@ -265,7 +271,7 @@ export default function ReportsPage() {
 
   // Item Sales logic
   const itemsSummary = {};
-  orders.forEach(o => {
+  activeOrders.forEach(o => {
     if (o.items && Array.isArray(o.items)) {
       o.items.forEach(item => {
         const name = item.name;
@@ -351,7 +357,7 @@ export default function ReportsPage() {
       </section>
 
       {/* Reports Navigation Tabs */}
-      <div style={styles.tabBar} className="no-print">
+      <div style={styles.tabBar} className="reports-tab-bar no-print">
         <button 
           onClick={() => setActiveTab("profit")}
           style={{
@@ -407,6 +413,18 @@ export default function ReportsPage() {
               <DollarSign size={16} />
               <span>Outstanding Balances</span>
             </button>
+            {profile?.role === "owner" && (
+              <button 
+                onClick={() => setActiveTab("avoided")}
+                style={{
+                  ...styles.tabBtn,
+                  ...(activeTab === "avoided" ? { ...styles.tabBtnActive, background: "rgba(239, 68, 68, 0.08)", color: "var(--accent-red)" } : {})
+                }}
+              >
+                <AlertTriangle size={16} />
+                <span>Avoided Bills</span>
+              </button>
+            )}
           </>
         )}
       </div>
@@ -933,6 +951,101 @@ export default function ReportsPage() {
               </div>
             );
           })()}
+
+          {/* TAB 6: AVOIDED BILLS LIST FOR OWNERS */}
+          {activeTab === "avoided" && profile?.role === "owner" && (() => {
+            const voidedList = voidedOrders.filter(o => {
+              const custName = o.customers?.name || "Walk-in";
+              const matchesSearch = o.order_number.toLowerCase().includes(outstandingSearch.toLowerCase()) || 
+                                    custName.toLowerCase().includes(outstandingSearch.toLowerCase());
+              return matchesSearch;
+            });
+
+            const totalVoidedVal = voidedOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+            const countVoided = voidedOrders.length;
+
+            return (
+              <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                {/* Aggregate Summary Box */}
+                <div style={styles.statsRow}>
+                  <div className="glass-panel" style={styles.statBox}>
+                    <span style={styles.statLabel}>Total Avoided Value</span>
+                    <span style={{ ...styles.statVal, color: "var(--accent-red)" }}>{formatCurrency(totalVoidedVal)}</span>
+                    <span style={styles.statDesc}>Cumulative value of canceled invoices</span>
+                  </div>
+                  <div className="glass-panel" style={styles.statBox}>
+                    <span style={styles.statLabel}>Avoided Transactions Count</span>
+                    <span style={{ ...styles.statVal, color: "var(--text-main)" }}>{countVoided}</span>
+                    <span style={styles.statDesc}>Total void transactions logged in this duration</span>
+                  </div>
+                </div>
+
+                {/* Main Table view */}
+                <div className="glass-panel" style={styles.detailCard}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", marginBottom: "20px", flexWrap: "wrap" }}>
+                    <div>
+                      <h3 style={styles.cardTitle}>Avoided Bills Audit Log</h3>
+                      <p style={styles.cardDesc}>Audit all cancelled print ledger files, reasons, and responsible staff members.</p>
+                    </div>
+                    {/* Reuse search bar */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(15, 23, 42, 0.4)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "0 10px", width: "100%", maxWidth: "300px" }}>
+                      <Search size={16} style={{ color: "var(--text-muted)" }} />
+                      <input
+                        type="text"
+                        placeholder="Search order or client..."
+                        className="input-field"
+                        style={{ background: "none", border: "none", height: "36px", fontSize: "13px", color: "var(--text-main)", outline: "none", width: "100%" }}
+                        value={outstandingSearch}
+                        onChange={(e) => setOutstandingSearch(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={styles.tableWrapper}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={styles.th}>Order Number</th>
+                          <th style={styles.th}>Teacher / Client Name</th>
+                          <th style={styles.th}>Voided By</th>
+                          <th style={styles.th}>Date Avoided</th>
+                          <th style={styles.th}>Reason</th>
+                          <th style={{ ...styles.th, textAlign: "right" }}>Original Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {voidedList.length === 0 ? (
+                          <tr>
+                            <td colSpan="6" style={styles.emptyRow}>
+                              {outstandingSearch ? "No profiles matched your search." : "No bills have been voided."}
+                            </td>
+                          </tr>
+                        ) : (
+                          voidedList.map((o) => (
+                            <tr key={o.id} style={styles.tr}>
+                              <td style={{ ...styles.td, fontWeight: "700", color: "var(--accent-red)" }}>{o.order_number}</td>
+                              <td style={styles.td}>{o.customers?.name || "Walk-in"}</td>
+                              <td style={styles.td}>{o.voided_by || "Unknown"}</td>
+                              <td style={styles.td}>
+                                {o.voided_at ? new Date(o.voided_at).toLocaleDateString("en-US", { dateStyle: "medium" }) : "N/A"}
+                              </td>
+                              <td style={{ ...styles.td, color: "var(--text-muted)", fontStyle: "italic", maxWidth: "250px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={o.voided_reason}>
+                                {o.voided_reason || "No reason specified"}
+                              </td>
+                              <td style={{ ...styles.td, textAlign: "right", fontWeight: "700" }}>
+                                {formatCurrency(o.total_amount)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
 
         </div>
       )}

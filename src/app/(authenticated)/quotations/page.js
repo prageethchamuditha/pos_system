@@ -120,10 +120,16 @@ export default function QuotationsPage() {
       if (oError) throw oError;
 
       // 3. Update customer outstanding balance
+      const { data: latestCust } = await supabase
+        .from("customers")
+        .select("outstanding_balance")
+        .eq("id", selectedQuotation.customer_id)
+        .single();
+      const latestBalance = latestCust ? Number(latestCust.outstanding_balance || 0) : 0;
       const { error: custError } = await supabase
         .from("customers")
         .update({
-          outstanding_balance: Number(selectedQuotation.customers.outstanding_balance || 0) + selectedQuotation.total_amount
+          outstanding_balance: latestBalance + selectedQuotation.total_amount
         })
         .eq("id", selectedQuotation.customer_id);
 
@@ -242,7 +248,7 @@ export default function QuotationsPage() {
           <div style={styles.spinner}></div>
         </div>
       ) : (
-        <div style={styles.layoutGrid}>
+        <div className="layout-grid" style={styles.layoutGrid}>
           {/* Left panel: list & search */}
           <div style={styles.leftPane}>
             <div className="glass-panel" style={styles.searchCard}>

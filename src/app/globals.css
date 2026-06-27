@@ -290,6 +290,7 @@ h1, h2, h3, h4, h5, h6 {
 @media (max-width: 991px) {
   .app-mobile-header {
     display: flex !important;
+    justify-content: space-between !important;
   }
   
   .app-sidebar {
@@ -297,6 +298,7 @@ h1, h2, h3, h4, h5, h6 {
     top: 0 !important;
     bottom: 0 !important;
     border-radius: 0 !important;
+    z-index: 999 !important;
   }
   
   .app-sidebar.mobile-open {
@@ -305,6 +307,119 @@ h1, h2, h3, h4, h5, h6 {
   
   .app-main-content {
     padding-left: 20px !important;
+    padding-right: 20px !important;
     padding-top: 80px !important; /* Make room for mobile header */
+  }
+
+  /* Grid Layouts collapse rules */
+  .layout-grid, 
+  .settings-users-layout,
+  .dashboard-lower-grid,
+  .quotations-layout-grid,
+  .customers-layout-grid,
+  .settings-layout-grid,
+  .reports-tab-content-grid {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+  }
+
+  /* POS Mobile Tabs */
+  .pos-mobile-tabs {
+    display: flex !important;
+    gap: 8px;
+    margin-bottom: 12px;
+    background: var(--bg-surface-elevated);
+    padding: 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    width: 100%;
+  }
+  .pos-mobile-tab {
+    flex: 1;
+    padding: 10px 6px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: var(--transition-fast);
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .pos-mobile-tab.active {
+    background: var(--primary) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px var(--primary-glow);
+  }
+  
+  /* POS panels toggle on mobile */
+  .pos-grid {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .pos-wrapper {
+    height: auto !important;
+    padding: 8px !important;
+  }
+  .pos-grid.show-cart .pos-right-panel {
+    display: none !important;
+  }
+  .pos-grid.show-catalog .pos-left-panel {
+    display: none !important;
+  }
+  
+  .pos-left-panel, .pos-right-panel {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  .pos-product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+  }
+  
+  .pos-client-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 10px !important;
+  }
+
+  .reports-tab-bar {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    padding-bottom: 8px !important;
+    gap: 8px !important;
+    display: flex !important;
+    width: 100% !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .reports-tab-bar button {
+    flex-shrink: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Force tables with auto overflow wrappers to scroll nicely */
+  div[style*="overflowX: auto"] table,
+  div[style*="overflow-x: auto"] table,
+  .table-responsive table {
+    min-width: 650px !important;
+    display: table !important;
+  }
+  
+  .glass-panel-elevated {
+    padding: 16px !important;
   }
 }

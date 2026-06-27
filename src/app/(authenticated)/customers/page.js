@@ -314,7 +314,13 @@ export default function CustomersPage() {
     setSavingAdvance(true);
     setErrorMsg("");
     try {
-      const newBalance = Number(selectedCust.outstanding_balance || 0) - amount;
+      const { data: latestCust } = await supabase
+        .from("customers")
+        .select("outstanding_balance")
+        .eq("id", selectedCust.id)
+        .single();
+      const latestBalance = latestCust ? Number(latestCust.outstanding_balance || 0) : 0;
+      const newBalance = latestBalance - amount;
       const { error } = await supabase
         .from("customers")
         .update({ outstanding_balance: newBalance })
@@ -481,7 +487,7 @@ export default function CustomersPage() {
         <div className="glass-panel animate-fade-in" style={styles.formCard}>
           <h2 style={styles.formTitle}>Register Client Profile</h2>
           <form onSubmit={handleAddCustomer} style={styles.form}>
-            <div style={styles.formRow}>
+            <div className="form-row" style={styles.formRow}>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Full Name *</label>
                 <input
@@ -507,7 +513,7 @@ export default function CustomersPage() {
               </div>
             </div>
 
-            <div style={styles.formRow}>
+            <div className="form-row" style={styles.formRow}>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Email Address</label>
                 <input
@@ -531,7 +537,7 @@ export default function CustomersPage() {
               </div>
             </div>
 
-            <div style={styles.formRow}>
+            <div className="form-row" style={styles.formRow}>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Portal Passcode PIN (optional)</label>
                 <input
@@ -568,7 +574,7 @@ export default function CustomersPage() {
         </div>
       ) : (
         /* Registry View split screen */
-        <div style={styles.layoutGrid}>
+        <div className="layout-grid" style={styles.layoutGrid}>
           {/* Left panel: List & Search */}
           <div style={styles.leftPane}>
             <div className="glass-panel" style={styles.searchCard}>

@@ -57,6 +57,50 @@ export default function OrdersPage() {
   const urlOrderId = searchParams.get("id");
   const autoPrint = searchParams.get("print") === "true";
 
+  const getDuplicateOrSuspiciousStatus = (currentOrder) => {
+    if (!currentOrder || !currentOrder.customer_id) return null;
+    const isWalkIn = currentOrder.customers?.name?.toLowerCase().includes("walk-in") || currentOrder.customers?.name?.toLowerCase().includes("unknown");
+    if (isWalkIn) return null;
+
+    // Filter all orders for this customer and sort them chronologically (oldest to newest)
+    const custOrders = orders
+      .filter(o => o.customer_id === currentOrder.customer_id)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    // Find the index of the current order
+    const currentIndex = custOrders.findIndex(o => o.id === currentOrder.id);
+    if (currentIndex <= 0) return null; // No preceding order exists
+
+    // The immediately preceding order is:
+    const precedingOrder = custOrders[currentIndex - 1];
+
+    // Check if the preceding order was voided
+    if (precedingOrder.status === "voided") {
+      // Compare items or totals
+      const currentItemsStr = JSON.stringify(currentOrder.items || []);
+      const precedingItemsStr = JSON.stringify(precedingOrder.items || []);
+      
+      const totalsMatch = Number(currentOrder.total_amount) === Number(precedingOrder.total_amount);
+      const itemsMatch = currentItemsStr === precedingItemsStr;
+
+      if (itemsMatch || totalsMatch) {
+        return {
+          status: "duplicate",
+          message: `Duplicate Bill (Preceded by voided ${precedingOrder.order_number})`,
+          details: `This order has the same total/items as the previously voided order ${precedingOrder.order_number} for this customer.`
+        };
+      } else {
+        return {
+          status: "suspicious",
+          message: `Suspicious Invoice (Preceded by voided ${precedingOrder.order_number})`,
+          details: `This customer had order ${precedingOrder.order_number} voided immediately before this transaction, but with different items/total.`
+        };
+      }
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     fetchOrders();
     fetchProfiles();
@@ -138,24 +182,6 @@ export default function OrdersPage() {
     }
 
     try {
-      // 1. PIN Authorization if active user is staff
-      if (profile?.role === "staff") {
-        // Query database to check if voidPIN matches any owner or manager passcode
-        const { data: managers, error: mError } = await supabase
-          .from("profiles")
-          .select("passcode")
-          .in("role", ["owner", "manager"]);
-        
-        if (mError) throw mError;
-        
-        const isPINValid = managers.some(m => m.passcode === voidPIN);
-        if (!isPINValid) {
-          setVoidError("Incorrect Owner/Manager passcode PIN authorization. Access denied.");
-          setSubmittingVoid(false);
-          return;
-        }
-      }
-
       // 2. Perform Order Status Update
       const { error: oError } = await supabase
         .from("orders")
@@ -173,10 +199,16 @@ export default function OrdersPage() {
       if (selectedOrder.customers && selectedOrder.balance_amount > 0) {
         const isWalkIn = selectedOrder.customers.name.toLowerCase().includes("walk-in") || selectedOrder.customers.name.toLowerCase().includes("unknown");
         if (!isWalkIn) {
+          const { data: latestCust } = await supabase
+            .from("customers")
+            .select("outstanding_balance")
+            .eq("id", selectedOrder.customer_id)
+            .single();
+          const latestBalance = latestCust ? Number(latestCust.outstanding_balance || 0) : 0;
           const { error: cError } = await supabase
             .from("customers")
             .update({
-              outstanding_balance: Math.max(0, Number(selectedOrder.customers.outstanding_balance || 0) - selectedOrder.balance_amount)
+              outstanding_balance: Math.max(0, latestBalance - selectedOrder.balance_amount)
             })
             .eq("id", selectedOrder.customer_id);
           if (cError) console.error("Error updating customer outstanding balance:", cError);
@@ -278,10 +310,16 @@ export default function OrdersPage() {
       if (oError) throw oError;
 
       // 2. Adjust Customer's Outstanding Balance
+      const { data: latestCust } = await supabase
+        .from("customers")
+        .select("outstanding_balance")
+        .eq("id", selectedOrder.customer_id)
+        .single();
+      const latestBalance = latestCust ? Number(latestCust.outstanding_balance || 0) : 0;
       const { error: cError } = await supabase
         .from("customers")
         .update({
-          outstanding_balance: Math.max(0, Number(selectedOrder.customers.outstanding_balance || 0) - paymentAmount)
+          outstanding_balance: Math.max(0, latestBalance - paymentAmount)
         })
         .eq("id", selectedOrder.customer_id);
 
@@ -337,6 +375,8 @@ export default function OrdersPage() {
       minimumFractionDigits: 0
     }).format(val);
   };
+
+  const selectedSecurityStatus = selectedOrder ? getDuplicateOrSuspiciousStatus(selectedOrder) : null;
   const handleSendWhatsApp = (order) => {
     if (!order || !order.customers) return;
     const cust = order.customers;
@@ -377,7 +417,7 @@ export default function OrdersPage() {
     const waUrl = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
 
     // Open WhatsApp FIRST (directly from user click — browser allows this)
-    window.open(waUrl, "_blank");
+    window.open(waUrl, "whatsapp_window");
 
     // Optionally open the print/invoice tab after a short delay
     setTimeout(() => {
@@ -448,7 +488,7 @@ export default function OrdersPage() {
           <div style={styles.spinner}></div>
         </div>
       ) : (
-        <div style={styles.ordersLayout}>
+        <div className="layout-grid" style={styles.ordersLayout}>
           {/* Left panel: Filter and list */}
           <div style={styles.leftPane}>
             <div className="glass-panel" style={styles.searchFilterCard}>
@@ -485,30 +525,51 @@ export default function OrdersPage() {
                 <div style={styles.emptyList}>No orders match search query.</div>
               ) : (
                 <div style={styles.ordersList}>
-                  {filteredOrders.map(order => (
-                    <div 
-                      key={order.id} 
-                      onClick={() => { setSelectedOrder(order); setErrorMsg(""); setSuccessMsg(""); }}
-                      style={{
-                        ...styles.orderItem,
-                        ...(selectedOrder?.id === order.id ? styles.orderItemActive : {})
-                      }}
-                    >
-                      <div style={styles.orderItemHeader}>
-                        <span style={styles.orderIdText}>{order.order_number}</span>
-                        <span className={`badge ${getStatusBadgeClass(order.status)}`}>
-                          {order.status?.replace("_", " ")}
-                        </span>
+                  {filteredOrders.map(order => {
+                    const status = getDuplicateOrSuspiciousStatus(order);
+                    return (
+                      <div 
+                        key={order.id} 
+                        onClick={() => { setSelectedOrder(order); setErrorMsg(""); setSuccessMsg(""); }}
+                        style={{
+                          ...styles.orderItem,
+                          ...(selectedOrder?.id === order.id ? styles.orderItemActive : {})
+                        }}
+                      >
+                        <div style={styles.orderItemHeader}>
+                          <span style={styles.orderIdText}>{order.order_number}</span>
+                          <span className={`badge ${getStatusBadgeClass(order.status)}`}>
+                            {order.status?.replace("_", " ")}
+                          </span>
+                        </div>
+                        {status && (
+                          <div style={{
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            color: status.status === "duplicate" ? "var(--accent-orange)" : "var(--accent-red)",
+                            background: status.status === "duplicate" ? "rgba(251, 146, 60, 0.08)" : "rgba(239, 68, 68, 0.08)",
+                            border: "1px solid " + (status.status === "duplicate" ? "rgba(251, 146, 60, 0.15)" : "rgba(239, 68, 68, 0.15)"),
+                            borderRadius: "4px",
+                            padding: "2px 6px",
+                            width: "fit-content",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px"
+                          }}>
+                            <AlertCircle size={10} />
+                            <span>{status.status === "duplicate" ? "Duplicate Bill" : "Suspicious"}</span>
+                          </div>
+                        )}
+                        <div style={styles.orderItemClient}>{order.customers?.name || "Walk-in"}</div>
+                        <div style={styles.orderItemFooter}>
+                          <span style={styles.orderItemDate}>
+                            {new Date(order.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                          <span style={styles.orderItemTotal}>{formatCurrency(order.total_amount)}</span>
+                        </div>
                       </div>
-                      <div style={styles.orderItemClient}>{order.customers?.name || "Walk-in"}</div>
-                      <div style={styles.orderItemFooter}>
-                        <span style={styles.orderItemDate}>
-                          {new Date(order.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </span>
-                        <span style={styles.orderItemTotal}>{formatCurrency(order.total_amount)}</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -517,6 +578,29 @@ export default function OrdersPage() {
           <div className="glass-panel" style={styles.rightPane}>
             {selectedOrder ? (
               <div style={styles.detailsContainer} className="animate-fade-in">
+                {/* Security Alert Banner */}
+                {selectedSecurityStatus && (
+                  <div style={{
+                    padding: "14px 16px",
+                    borderRadius: "8px",
+                    background: selectedSecurityStatus.status === "duplicate" ? "rgba(251, 146, 60, 0.08)" : "rgba(239, 68, 68, 0.08)",
+                    border: "1px solid " + (selectedSecurityStatus.status === "duplicate" ? "rgba(251, 146, 60, 0.25)" : "rgba(239, 68, 68, 0.25)"),
+                    color: selectedSecurityStatus.status === "duplicate" ? "var(--accent-orange)" : "var(--accent-red)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                    marginBottom: "16px",
+                    fontSize: "13px",
+                    textAlign: "left"
+                  }}>
+                    <strong style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: "700" }}>
+                      <AlertCircle size={16} />
+                      {selectedSecurityStatus.message}
+                    </strong>
+                    <span style={{ opacity: 0.95 }}>{selectedSecurityStatus.details}</span>
+                  </div>
+                )}
+
                 {/* Voided Invoice Banner */}
                 {selectedOrder.status === "voided" && (
                   <div style={{
@@ -807,30 +891,6 @@ export default function OrdersPage() {
                   disabled={submittingVoid}
                 />
               </div>
-
-              {profile?.role === "staff" && (
-                <div style={styles.modalInputGroup}>
-                  <label style={styles.modalLabel}>Supervisor PIN Authorization *</label>
-                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                    <Lock size={16} style={{ position: "absolute", left: "14px", color: "var(--text-subtle)" }} />
-                    <input
-                      type="password"
-                      placeholder="Enter Owner or Manager passcode"
-                      className="input-field"
-                      style={{
-                        paddingLeft: "36px",
-                        height: "40px",
-                        fontSize: "14px",
-                        width: "100%"
-                      }}
-                      value={voidPIN}
-                      onChange={(e) => setVoidPIN(e.target.value)}
-                      required
-                      disabled={submittingVoid}
-                    />
-                  </div>
-                </div>
-              )}
 
               <div style={styles.modalBtnRow}>
                 <button

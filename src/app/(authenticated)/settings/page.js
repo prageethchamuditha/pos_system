@@ -793,7 +793,7 @@ export default function SettingsPage() {
               <h2 style={styles.sectionTitle}>Shop Details (Printed Invoices)</h2>
               <form onSubmit={handleSaveShopSettings} style={styles.form}>
                 
-                <div style={styles.formRow}>
+                <div className="form-row" style={styles.formRow}>
                   <div style={styles.inputGroup}>
                     <label style={styles.label}>Shop Name</label>
                     <input 
@@ -840,7 +840,7 @@ export default function SettingsPage() {
                 </div>
 
                 <h3 style={styles.subSubTitle}>Address Lines</h3>
-                <div style={styles.formRow}>
+                <div className="form-row" style={styles.formRow}>
                   <div style={styles.inputGroup}>
                     <label style={styles.label}>Address Line 1</label>
                     <input 
@@ -864,7 +864,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div style={styles.formRow}>
+                <div className="form-row" style={styles.formRow}>
                   <div style={styles.inputGroup}>
                     <label style={styles.label}>Address Line 3 (City)</label>
                     <input 
@@ -888,7 +888,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div style={styles.formRow}>
+                <div className="form-row" style={styles.formRow}>
                   <div style={styles.inputGroup}>
                     <label style={styles.label}>Support Email</label>
                     <input 
@@ -1060,7 +1060,7 @@ export default function SettingsPage() {
             </div>
           ) : activeTab === "users" && profile?.role !== "staff" ? (
             /* Tab 2: User Access */
-            <div style={styles.usersLayout}>
+            <div className="settings-users-layout" style={styles.usersLayout}>
               {/* User Sign Up Form (Only visible to owner) */}
               <div className="glass-panel animate-fade-in" style={styles.newUserCard}>
                 <h2 style={styles.sectionTitle}>Add Staff Access</h2>

@@ -265,7 +265,8 @@ export default function DashboardPage() {
       const { data: unpaidOrders, error: unpaidError } = await supabase
         .from("orders")
         .select("balance_amount")
-        .gt("balance_amount", 0);
+        .gt("balance_amount", 0)
+        .neq("status", "voided");
 
       if (unpaidError) throw unpaidError;
 
@@ -293,9 +294,10 @@ export default function DashboardPage() {
       if (recentError) throw recentError;
 
       // Calculations
+      const activeTodayOrders = (todayOrders || []).filter(o => o.status !== "voided");
       let salesSum = 0;
-      let ordersCount = todayOrders?.length || 0;
-      todayOrders?.forEach(order => {
+      let ordersCount = activeTodayOrders.length;
+      activeTodayOrders.forEach(order => {
         salesSum += Number(order.total_amount || 0);
       });
 
@@ -499,7 +501,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Lower Grid: Quick Actions and Recent Activity */}
-          <div style={styles.lowerGrid}>
+          <div className="dashboard-lower-grid" style={styles.lowerGrid}>
             {/* Quick Actions */}
             <div className="glass-panel" style={styles.actionsPanel}>
               <h2 style={styles.panelTitle}>Quick Operations</h2>

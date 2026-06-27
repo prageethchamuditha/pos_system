@@ -22,7 +22,8 @@ import {
   RotateCcw,
   Clock,
   Printer,
-  Send
+  Send,
+  DollarSign
 } from "lucide-react";
 
 export default function POSPage() {
@@ -77,6 +78,38 @@ export default function POSPage() {
   // Payment state
   const [paidAmount, setPaidAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash"); // 'cash' | 'bank_transfer' | 'pending'
+  const [applyOverpaymentToOutstanding, setApplyOverpaymentToOutstanding] = useState(false);
+  const [useAdvanceCredit, setUseAdvanceCredit] = useState(false);
+  
+  // POS Advance Modal States
+  const [showPOSAdvanceModal, setShowPOSAdvanceModal] = useState(false);
+  const [posAdvanceAmount, setPosAdvanceAmount] = useState("");
+  const [posAdvanceMethod, setPosAdvanceMethod] = useState("cash");
+  const [savingPOSAdvance, setSavingPOSAdvance] = useState(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState("catalog"); // 'catalog' | 'cart'
+
+  useEffect(() => {
+    if (selectedCustomer && Number(selectedCustomer.outstanding_balance || 0) > 0) {
+      setApplyOverpaymentToOutstanding(true);
+    } else {
+      setApplyOverpaymentToOutstanding(false);
+    }
+  }, [selectedCustomer]);
+
+  useEffect(() => {
+    if (selectedCustomer) {
+      const balance = Number(selectedCustomer.outstanding_balance || 0);
+      if (balance < 0) {
+        const credit = Math.abs(balance);
+        const confirmUse = window.confirm(`Customer ${selectedCustomer.name} has ${credit.toFixed(0)} LKR advance credit available. Would you like to apply it to this invoice?`);
+        setUseAdvanceCredit(confirmUse);
+      } else {
+        setUseAdvanceCredit(false);
+      }
+    } else {
+      setUseAdvanceCredit(false);
+    }
+  }, [selectedCustomer]);
   
   // Custom Product Builder Modal
   const [showCustomModal, setShowCustomModal] = useState(false);
@@ -102,13 +135,34 @@ export default function POSPage() {
   // Credit / Overpaid amount
   const [creditAmount, setCreditAmount] = useState("");
 
+  // Walk-in Customer Capture Modal
+  const [showWalkInModal, setShowWalkInModal] = useState(false);
+  const [walkInName, setWalkInName] = useState("");
+  const [walkInPhone, setWalkInPhone] = useState("");
+  const [walkInCheckoutData, setWalkInCheckoutData] = useState(null);
+
   // Calculations
   const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
   const totalAmount = subtotal;
-  // For overpaid: balance = -(creditAmount). For others: balance = total - paid
+  const isRegisteredCust = selectedCustomer && 
+    !selectedCustomer.name.toLowerCase().includes("walk-in") && 
+    !selectedCustomer.name.toLowerCase().includes("unknown");
+
+  // Advance credit offset calculations
+  const availableCredit = isRegisteredCust && Number(selectedCustomer.outstanding_balance || 0) < 0
+    ? Math.abs(Number(selectedCustomer.outstanding_balance))
+    : 0;
+  const appliedCredit = useAdvanceCredit ? Math.min(totalAmount, availableCredit) : 0;
+  const remainingTotal = totalAmount - appliedCredit;
+
+  // For overpaid: balance = -(creditAmount)
+  // For cash/transfer with overpayment and checkbox unchecked: balance = 0 (the rest is change)
+  // For others: balance = remainingTotal - paid
   const balanceAmount = paymentMethod === "overpaid"
     ? -(Number(creditAmount) || 0)
-    : totalAmount - Number(paidAmount || 0);
+    : (isRegisteredCust && (paymentMethod === "cash" || paymentMethod === "bank_transfer") && Number(paidAmount || 0) > remainingTotal)
+      ? (applyOverpaymentToOutstanding ? remainingTotal - Number(paidAmount || 0) : 0)
+      : remainingTotal - Number(paidAmount || 0);
 
   // Sync paid amount based on payment method selection
   useEffect(() => {
@@ -116,13 +170,13 @@ export default function POSPage() {
       setPaidAmount("0");
       setCreditAmount("");
     } else if (paymentMethod === "overpaid") {
-      setPaidAmount(totalAmount.toFixed(0));
+      setPaidAmount(remainingTotal.toFixed(0));
       setCreditAmount("");
     } else if (paymentMethod === "cash" || paymentMethod === "bank_transfer") {
-      setPaidAmount(totalAmount.toFixed(0));
+      setPaidAmount(remainingTotal.toFixed(0));
       setCreditAmount("");
     }
-  }, [paymentMethod, totalAmount]);
+  }, [paymentMethod, remainingTotal]);
 
   // Reset payment method if Walk-in customer is selected
   useEffect(() => {
@@ -207,23 +261,21 @@ export default function POSPage() {
           ) {
             return;
           }
-          if (isInputField && (showCustModal || showCustomModal || showSelectCustModal || showDiscountModal || showCashCalcModal)) {
+          if (isInputField && (showCustModal || showCustomModal || showSelectCustModal || showDiscountModal || showCashCalcModal || showWalkInModal)) {
             return;
           }
         }
 
-        if (cart.length > 0 && !showSelectCustModal && !isLocked && !showCustModal && !showCustomModal && !completedOrder && !showDiscountModal && !showCashCalcModal) {
+        if (cart.length > 0 && !showSelectCustModal && !isLocked && !showCustModal && !showCustomModal && !completedOrder && !showDiscountModal && !showCashCalcModal && !showWalkInModal) {
           e.preventDefault();
-          // Initialize cashReceived with totalAmount to pay, or empty string
-          setCashReceived(totalAmount.toFixed(0));
-          setShowCashCalcModal(true);
+          handleCheckout(false);
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cart, showSelectCustModal, isLocked, showCustModal, showCustomModal, completedOrder, showDiscountModal, showCashCalcModal, totalAmount]);
+  }, [cart, showSelectCustModal, isLocked, showCustModal, showCustomModal, completedOrder, showDiscountModal, showCashCalcModal, showWalkInModal, selectedCustomer, totalAmount]);
 
   const [products, setProducts] = useState([]);
 
@@ -564,7 +616,7 @@ export default function POSPage() {
   };
 
   const generateWhatsAppLink = (customer, orderNum, orderId, total, paid, balance, itemsList) => {
-    if (!customer || customer.name.toLowerCase().includes("walk-in") || customer.name.toLowerCase().includes("unknown")) {
+    if (!customer || !customer.phone || customer.phone === "0000000000") {
       return null;
     }
 
@@ -603,6 +655,118 @@ export default function POSPage() {
     return `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
   };
 
+  const handlePOSRecordAdvance = async (e) => {
+    e.preventDefault();
+    if (!selectedCustomer) return;
+    const amount = parseFloat(posAdvanceAmount);
+    if (!amount || amount <= 0) {
+      alert("Please enter a valid advance amount greater than zero.");
+      return;
+    }
+
+    setSavingPOSAdvance(true);
+    try {
+      const date = new Date();
+      const year = date.getFullYear();
+
+      // 1. Fetch count of orders to generate order number
+      const { data: countData } = await supabase
+        .from("orders")
+        .select("id")
+        .gte("created_at", new Date(year, 0, 1).toISOString());
+
+      let orderPrefix = "ORD";
+      let orderStartNumber = 1;
+      try {
+        const s = JSON.parse(localStorage.getItem("printx_shop_settings") || "{}");
+        if (s.orderPrefix) orderPrefix = s.orderPrefix;
+        if (s.orderStartNumber) orderStartNumber = Math.max(1, parseInt(s.orderStartNumber) || 1);
+      } catch (_) {}
+
+      const seq = ((countData?.length || 0) + orderStartNumber).toString().padStart(4, "0");
+      const orderNum = `${orderPrefix}-${year}-${seq}`;
+
+      // 2. Insert Order for Advance Payment
+      const { data: order, error: oError } = await supabase
+        .from("orders")
+        .insert({
+          order_number: orderNum,
+          customer_id: selectedCustomer.id,
+          total_amount: amount,
+          paid_amount: amount,
+          balance_amount: 0,
+          payment_method: posAdvanceMethod,
+          items: [{ name: "Advance Payment", qty: 1, price: amount, total: amount }],
+          created_by: profile?.username || "Unknown",
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (oError) throw oError;
+
+      // 3. Update customer outstanding balance
+      // Since it is an advance payment, it reduces their outstanding balance (moving it negative if credit)
+      const { data: latestCust } = await supabase
+        .from("customers")
+        .select("outstanding_balance")
+        .eq("id", selectedCustomer.id)
+        .single();
+      const latestBalance = latestCust ? Number(latestCust.outstanding_balance || 0) : 0;
+      const newBalance = latestBalance - amount;
+
+      const { error: cError } = await supabase
+        .from("customers")
+        .update({ outstanding_balance: newBalance })
+        .eq("id", selectedCustomer.id);
+      if (cError) throw cError;
+
+      // 4. Trigger Google Sheets Sync
+      try {
+        fetch("/api/sync-sheets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            order_number: orderNum,
+            customer_name: selectedCustomer.name,
+            customer_phone: selectedCustomer.phone,
+            total_amount: amount,
+            paid_amount: amount,
+            balance_amount: 0,
+            items: [{ name: "Advance Payment", qty: 1, price: amount, total: amount }],
+            date: new Date().toISOString()
+          })
+        });
+      } catch (syncErr) {
+        console.error("Sheets sync failed:", syncErr);
+      }
+
+      setSuccessMsg(`Advance payment of ${amount.toFixed(0)} LKR recorded for ${selectedCustomer.name}!`);
+      setShowPOSAdvanceModal(false);
+      setPosAdvanceAmount("");
+      
+      // Store completed order in state to trigger custom printed bill modal
+      setCompletedOrder({
+        orderNum,
+        orderId: order.id,
+        customerName: selectedCustomer.name,
+        customerPhone: selectedCustomer.phone,
+        total: amount,
+        paid: amount,
+        balance: 0,
+        items: [{ name: "Advance Payment", qty: 1, price: amount, total: amount }],
+        waLink: null
+      });
+
+      fetchCustomers(); // Refetch customer list
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err) {
+      alert("Error: " + (err.message || "Failed to record advance payment."));
+    } finally {
+      setSavingPOSAdvance(false);
+    }
+  };
+
   const handleCheckout = async (isQuotation = false) => {
     if (cart.length === 0) {
       setErrorMsg("Please add products to the cart before checking out.");
@@ -614,6 +778,30 @@ export default function POSPage() {
       return;
     }
 
+    // For quotations, proceed directly without payment details
+    if (isQuotation) {
+      await proceedWithCheckout(isQuotation);
+      return;
+    }
+
+    // For regular orders, check if walk-in customer
+    const isWalkIn = !selectedCustomer || selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown");
+    
+    if (isWalkIn) {
+      // Show walk-in capture modal first
+      setWalkInCheckoutData({ isQuotation: false });
+      setWalkInName("");
+      setWalkInPhone("");
+      setShowWalkInModal(true);
+      return;
+    }
+
+    // For regular customers, show cash calculator
+    setCashReceived(totalAmount.toFixed(0));
+    setShowCashCalcModal(true);
+  };
+
+  const proceedWithCheckout = async (isQuotation = false) => {
     setSubmitting(true);
     setErrorMsg("");
     setSuccessMsg("");
@@ -632,18 +820,28 @@ export default function POSPage() {
       } catch (_) {}
 
       // Resolve Customer to Use (default to Walk-in Customer if none selected)
-      let customerToUse = selectedCustomer;
-      if (!customerToUse) {
+      let customerToUse = null;
+      const isSelectedWalkIn = selectedCustomer && (selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown"));
+      
+      if (selectedCustomer && !isSelectedWalkIn) {
+        customerToUse = selectedCustomer;
+      } else {
         const walkIn = customers.find(c => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("unknown"));
         if (walkIn) {
-          customerToUse = walkIn;
+          customerToUse = { ...walkIn };
+          if (walkInName.trim() && walkInName !== "Walk-in Customer") {
+            customerToUse.name = walkInName.trim();
+          }
+          if (walkInPhone.trim() && walkInPhone !== "0000000000") {
+            customerToUse.phone = walkInPhone.trim();
+          }
         } else {
           // Auto create Walk-in Customer in database
           const { data: newWalkIn, error: createError } = await supabase
             .from("customers")
             .insert({
-              name: "Walk-in Customer",
-              phone: "0000000000",
+              name: walkInName.trim() || "Walk-in Customer",
+              phone: walkInPhone.trim() || "0000000000",
               outstanding_balance: 0,
               created_at: new Date().toISOString()
             })
@@ -723,11 +921,31 @@ export default function POSPage() {
         const seq = ((countData?.length || 0) + orderStartNumber).toString().padStart(4, "0");
         const orderNum = `${orderPrefix}-${year}-${seq}`;
 
-        // For overpaid: actual paid = total + credit. Balance = -credit.
+        const isRegisteredCust = customerToUse && 
+          !customerToUse.name.toLowerCase().includes("walk-in") && 
+          !customerToUse.name.toLowerCase().includes("unknown");
+
+        // Calculate advance credit details
+        const availableCredit = isRegisteredCust && Number(customerToUse.outstanding_balance || 0) < 0
+          ? Math.abs(Number(customerToUse.outstanding_balance))
+          : 0;
+        const appliedCredit = useAdvanceCredit ? Math.min(totalAmount, availableCredit) : 0;
+        const remainingTotal = totalAmount - appliedCredit;
+
+        // Calculate actual checkout balance and effective paid amount taking checkbox and credit offset into account
+        const checkoutBalance = paymentMethod === "overpaid"
+          ? -(Number(creditAmount) || 0)
+          : (isRegisteredCust && (paymentMethod === "cash" || paymentMethod === "bank_transfer") && Number(paidAmount || 0) > remainingTotal)
+            ? (applyOverpaymentToOutstanding ? remainingTotal - Number(paidAmount || 0) : 0)
+            : remainingTotal - Number(paidAmount || 0);
+
         const effectivePaid = paymentMethod === "overpaid"
           ? totalAmount + (Number(creditAmount) || 0)
-          : Number(paidAmount || 0);
-        const storedMethod = paymentMethod === "overpaid" ? "cash" : paymentMethod;
+          : (isRegisteredCust && (paymentMethod === "cash" || paymentMethod === "bank_transfer") && Number(paidAmount || 0) > remainingTotal)
+            ? (applyOverpaymentToOutstanding ? Number(paidAmount || 0) + appliedCredit : totalAmount)
+            : Number(paidAmount || 0) + appliedCredit;
+
+        const storedMethod = paymentMethod === "overpaid" ? "cash" : (useAdvanceCredit && remainingTotal === 0 ? "advance_deduction" : paymentMethod);
 
         // 2. Insert Order
         const { data: order, error: oError } = await supabase
@@ -737,7 +955,7 @@ export default function POSPage() {
             customer_id: customerToUse.id,
             total_amount: totalAmount,
             paid_amount: effectivePaid,
-            balance_amount: balanceAmount,
+            balance_amount: checkoutBalance,
             payment_method: storedMethod,
             items: cart.map(item => ({ 
               name: item.name, 
@@ -756,9 +974,18 @@ export default function POSPage() {
 
         if (oError) throw oError;
 
-        // 3. Update customer outstanding balance for any non-zero balance
-        if (balanceAmount !== 0) {
-          const newOutstanding = Number(customerToUse.outstanding_balance || 0) + balanceAmount;
+        // 3. Update customer outstanding balance
+        // We adjust their balance by the applied credit (spent credit increases outstanding balance)
+        // plus any checkout balance (unpaid portion of remaining total)
+        const balanceAdjustment = appliedCredit + checkoutBalance;
+        if (balanceAdjustment !== 0) {
+          const { data: latestCust } = await supabase
+            .from("customers")
+            .select("outstanding_balance")
+            .eq("id", customerToUse.id)
+            .single();
+          const latestBalance = latestCust ? Number(latestCust.outstanding_balance || 0) : 0;
+          const newOutstanding = latestBalance + balanceAdjustment;
           const { error: uError } = await supabase
             .from("customers")
             .update({ outstanding_balance: newOutstanding })
@@ -777,7 +1004,7 @@ export default function POSPage() {
               customer_phone: customerToUse.phone,
               total_amount: totalAmount,
               paid_amount: effectivePaid,
-              balance_amount: balanceAmount,
+              balance_amount: checkoutBalance,
               items: cart.map(item => ({ 
                 name: item.name, 
                 qty: item.qty, 
@@ -796,20 +1023,21 @@ export default function POSPage() {
 
         setSuccessMsg(`Order ${orderNum} Created Successfully!`);
         
-        // If not walk-in customer, redirect/open WhatsApp Web automatically
+        // If not walk-in customer, OR if a phone number was entered during walk-in modal checkout:
         let waLink = null;
-        if (!isWalkIn) {
+        const hasCustomPhone = walkInPhone && walkInPhone.trim() && walkInPhone.trim() !== "0000000000";
+        if (!isWalkIn || hasCustomPhone) {
           waLink = generateWhatsAppLink(
             customerToUse,
             orderNum,
             order.id,
             totalAmount,
             effectivePaid,
-            balanceAmount,
+            checkoutBalance,
             cart
           );
           if (waLink) {
-            window.open(waLink, "_blank");
+            window.open(waLink, "whatsapp_window");
           }
         }
 
@@ -821,7 +1049,7 @@ export default function POSPage() {
           customerPhone: customerToUse.phone,
           total: totalAmount,
           paid: effectivePaid,
-          balance: balanceAmount,
+          balance: checkoutBalance,
           items: cart,
           waLink: waLink
         });
@@ -830,6 +1058,13 @@ export default function POSPage() {
         setPaidAmount("");
         setCreditAmount("");
         setSelectedCartItemId(null);
+        // Clear walk-in state
+        setWalkInName("");
+        setWalkInPhone("");
+        setWalkInCheckoutData(null);
+        setApplyOverpaymentToOutstanding(false); // Reset checkbox state
+        setUseAdvanceCredit(false); // Reset credit offset checkbox state
+        fetchCustomers(); // Refetch to update in-memory client list and selectedCustomer's balance
       }
     } catch (err) {
       setErrorMsg(err.message || "Something went wrong. Please check again.");
@@ -852,7 +1087,7 @@ export default function POSPage() {
   });
 
   return (
-    <div style={styles.posWrapper}>
+    <div className="pos-wrapper" style={styles.posWrapper}>
       {/* Top Banner Notifications */}
       {successMsg && (
         <div style={styles.notificationOverlay}>
@@ -890,9 +1125,27 @@ export default function POSPage() {
         </div>
       )}
 
-      <div style={styles.posGrid}>
+      {/* Mobile Tabs Switcher */}
+      <div className="pos-mobile-tabs no-print">
+        <button 
+          type="button"
+          onClick={() => setMobileActiveTab("catalog")} 
+          className={`pos-mobile-tab ${mobileActiveTab === "catalog" ? "active" : ""}`}
+        >
+          📦 Catalog
+        </button>
+        <button 
+          type="button"
+          onClick={() => setMobileActiveTab("cart")} 
+          className={`pos-mobile-tab ${mobileActiveTab === "cart" ? "active" : ""}`}
+        >
+          🛒 Cart ({cart.reduce((sum, item) => sum + Number(item.qty || 0), 0)})
+        </button>
+      </div>
+
+      <div className={`pos-grid ${mobileActiveTab === "cart" ? "show-cart" : "show-catalog"}`} style={styles.posGrid}>
         {/* LEFT PANEL: BILLING & ACTIVE CART */}
-        <section style={styles.leftPanel} className="glass-panel">
+        <section className="pos-left-panel glass-panel" style={styles.leftPanel}>
           
           <div style={styles.cartHeader}>
             <button 
@@ -1060,6 +1313,18 @@ export default function POSPage() {
               <span>Total</span>
               <span>{totalAmount.toFixed(0)} LKR</span>
             </div>
+            {useAdvanceCredit && (
+              <div style={{ ...styles.balanceRow, color: "var(--accent-green)", fontWeight: 600 }}>
+                <span>Applied Advance Credit:</span>
+                <span>-{appliedCredit.toFixed(0)} LKR</span>
+              </div>
+            )}
+            {useAdvanceCredit && (
+              <div style={{ ...styles.grandTotalRow, fontSize: "15px", marginTop: "4px", borderTop: "1px dashed var(--border)" }}>
+                <span>Remaining to Pay:</span>
+                <span>{remainingTotal.toFixed(0)} LKR</span>
+              </div>
+            )}
             
             {/* Payment Method Selector */}
             <div style={styles.methodSelectorBox}>
@@ -1165,6 +1430,63 @@ export default function POSPage() {
                 />
               </div>
             )}
+
+            {/* Checkbox for available advance credit offset */}
+            {selectedCustomer && Number(selectedCustomer.outstanding_balance || 0) < 0 && (
+              <div style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "8px", 
+                marginTop: "10px", 
+                marginBottom: "10px",
+                padding: "8px 12px", 
+                background: "rgba(16, 185, 129, 0.06)", 
+                border: "1px solid rgba(16, 185, 129, 0.2)", 
+                borderRadius: "8px" 
+              }}>
+                <input
+                  type="checkbox"
+                  id="useAdvance"
+                  checked={useAdvanceCredit}
+                  onChange={(e) => setUseAdvanceCredit(e.target.checked)}
+                  style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                />
+                <label htmlFor="useAdvance" style={{ fontSize: "11px", color: "var(--text-main)", cursor: "pointer", fontWeight: 600, userSelect: "none" }}>
+                  Use available advance credit ({Math.abs(selectedCustomer.outstanding_balance).toFixed(0)} LKR)
+                </label>
+              </div>
+            )}
+
+            {/* Checkbox for applying overpayment to outstanding balance */}
+            {selectedCustomer && 
+             !selectedCustomer.name.toLowerCase().includes("walk-in") && 
+             !selectedCustomer.name.toLowerCase().includes("unknown") && 
+             (paymentMethod === "cash" || paymentMethod === "bank_transfer") && 
+             Number(paidAmount || 0) > remainingTotal && (
+              <div style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "8px", 
+                marginTop: "10px", 
+                marginBottom: "10px",
+                padding: "8px 12px", 
+                background: "rgba(59, 130, 246, 0.06)", 
+                border: "1px solid rgba(59, 130, 246, 0.2)", 
+                borderRadius: "8px" 
+              }}>
+                <input
+                  type="checkbox"
+                  id="applyOverpayment"
+                  checked={applyOverpaymentToOutstanding}
+                  onChange={(e) => setApplyOverpaymentToOutstanding(e.target.checked)}
+                  style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                />
+                <label htmlFor="applyOverpayment" style={{ fontSize: "11px", color: "var(--text-main)", cursor: "pointer", fontWeight: 500, userSelect: "none" }}>
+                  Apply extra {(Number(paidAmount) - remainingTotal).toFixed(0)} LKR to outstanding balance (reduce debt)
+                </label>
+              </div>
+            )}
+
             {paymentMethod !== "overpaid" && paidAmount && (
               <div style={styles.balanceRow}>
                 {balanceAmount > 0 ? (
@@ -1179,7 +1501,23 @@ export default function POSPage() {
                     <span>Balance Due:</span>
                     <span style={{ color: "var(--accent-green)", fontWeight: 700 }}>Fully Paid ✓</span>
                   </>
+                ) : balanceAmount < 0 ? (
+                  <>
+                    <span>Excess to Account Credit:</span>
+                    <span style={{ color: "var(--accent-green)", fontWeight: 700 }}>
+                      {Math.abs(balanceAmount).toFixed(0)} LKR
+                    </span>
+                  </>
                 ) : null}
+              </div>
+            )}
+
+            {paymentMethod !== "overpaid" && Number(paidAmount || 0) > remainingTotal && !applyOverpaymentToOutstanding && (
+              <div style={{ ...styles.balanceRow, marginTop: "4px" }}>
+                <span>Change to return:</span>
+                <span style={{ color: "#3b82f6", fontWeight: 700 }}>
+                  {(Number(paidAmount) - remainingTotal).toFixed(0)} LKR
+                </span>
               </div>
             )}
           </div>
@@ -1195,10 +1533,7 @@ export default function POSPage() {
               <span>Quotation</span>
             </button>
             <button 
-              onClick={() => {
-                setCashReceived(totalAmount.toFixed(0));
-                setShowCashCalcModal(true);
-              }} 
+              onClick={() => handleCheckout(false)} 
               style={styles.payBtn} 
               className="btn btn-primary" 
               disabled={cart.length === 0}
@@ -1210,10 +1545,10 @@ export default function POSPage() {
         </section>
 
         {/* RIGHT PANEL: CATALOG GRID & CLIENT SELECTOR */}
-        <section style={styles.rightPanel}>
+        <section className="pos-right-panel" style={styles.rightPanel}>
           
           {/* Top Row: Client profile Selector */}
-          <div className="glass-panel" style={styles.clientBar}>
+          <div className="glass-panel pos-client-bar" style={styles.clientBar}>
             <div style={styles.clientSelector}>
               <User size={16} style={{ color: "var(--primary)" }} />
               {selectedCustomer ? (
@@ -1235,6 +1570,20 @@ export default function POSPage() {
               >
                 Exit POS
               </Link>
+
+              {selectedCustomer && 
+               !selectedCustomer.name.toLowerCase().includes("walk-in") && 
+               !selectedCustomer.name.toLowerCase().includes("unknown") && (
+                <button 
+                  type="button"
+                  onClick={() => setShowPOSAdvanceModal(true)} 
+                  className="btn btn-secondary"
+                  style={{ ...styles.smallActionBtn, background: "rgba(16, 185, 129, 0.12)", borderColor: "rgba(16, 185, 129, 0.25)", color: "var(--accent-green)" }}
+                >
+                  <DollarSign size={14} />
+                  <span>Receive Advance</span>
+                </button>
+              )}
 
               <button 
                 type="button" 
@@ -1299,7 +1648,7 @@ export default function POSPage() {
           </div>
 
           {/* Catalog Operations Bar */}
-          <div className="glass-panel" style={styles.operationsBar}>
+          <div className="glass-panel pos-operations-bar" style={styles.operationsBar}>
             {/* Category selection */}
             <div style={styles.categoryFilters}>
               {categories.map(cat => (
@@ -1343,7 +1692,7 @@ export default function POSPage() {
             {filteredProducts.length === 0 ? (
               <div style={styles.emptyProducts}>No items matched the search parameters.</div>
             ) : (
-              <div style={styles.productGrid}>
+              <div className="pos-product-grid" style={styles.productGrid}>
                 {filteredProducts.map(prod => (
                   <div 
                     key={prod.id} 
@@ -1661,8 +2010,12 @@ export default function POSPage() {
                 onClick={() => {
                   // Walk-in customer: skip detail form, proceed directly to billing
                   const walkIn = customers.find(c => c.name.toLowerCase().includes("walk-in") || c.name.toLowerCase().includes("unknown"));
-                  const walkInCustomer = walkIn || { id: "walkin", name: "Walk-in Customer", phone: "0000000000", outstanding_balance: 0 };
-                  setSelectedCustomer(walkInCustomer);
+                  if (walkIn) {
+                    setSelectedCustomer(walkIn);
+                  } else {
+                    // No walk-in customer in database yet - it will be created on checkout
+                    setSelectedCustomer(null);
+                  }
                   setShowSelectCustModal(false);
                   setShowCustModal(false); // Ensure registration form never opens for walk-in
                 }}
@@ -1863,8 +2216,8 @@ export default function POSPage() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 // Validate if amount received is valid for cash payments
-                if (paymentMethod === "cash" && Number(cashReceived || 0) < totalAmount) {
-                  const confirmPartial = window.confirm(`Amount received (${cashReceived} LKR) is less than the total invoice amount (${totalAmount.toFixed(0)} LKR). This will create an outstanding debt of ${(totalAmount - Number(cashReceived)).toFixed(0)} LKR. Do you want to proceed?`);
+                if (paymentMethod === "cash" && Number(cashReceived || 0) < remainingTotal) {
+                  const confirmPartial = window.confirm(`Amount received (${cashReceived} LKR) is less than the remaining invoice amount (${remainingTotal.toFixed(0)} LKR). This will create an outstanding debt of ${(remainingTotal - Number(cashReceived)).toFixed(0)} LKR. Do you want to proceed?`);
                   if (!confirmPartial) return;
                 }
                 
@@ -1872,14 +2225,14 @@ export default function POSPage() {
                 if (paymentMethod === "cash") {
                   setPaidAmount(cashReceived || "0");
                 } else if (paymentMethod === "bank_transfer") {
-                  setPaidAmount(totalAmount.toFixed(0));
+                  setPaidAmount(remainingTotal.toFixed(0));
                 } else {
                   setPaidAmount("0");
                 }
                 
                 setShowCashCalcModal(false);
-                // Call checkout
-                await handleCheckout(false);
+                // Proceed directly to checkout (don't call handleCheckout again - that would re-trigger walk-in modal)
+                await proceedWithCheckout(false);
               }}
               style={styles.modalForm}
             >
@@ -1907,9 +2260,9 @@ export default function POSPage() {
                           }
                           setPaymentMethod(m.id);
                           if (m.id === "cash") {
-                            setCashReceived(totalAmount.toFixed(0));
+                            setCashReceived(remainingTotal.toFixed(0));
                           } else if (m.id === "bank_transfer") {
-                            setCashReceived(totalAmount.toFixed(0));
+                            setCashReceived(remainingTotal.toFixed(0));
                           } else {
                             setCashReceived("0");
                           }
@@ -1938,18 +2291,28 @@ export default function POSPage() {
               {/* Total Row */}
               <div style={{
                 display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
+                flexDirection: "column",
+                gap: "4px",
                 padding: "10px 14px",
                 background: "rgba(99, 102, 241, 0.05)",
                 border: "1px solid rgba(99, 102, 241, 0.15)",
                 borderRadius: "var(--radius-sm)",
                 margin: "4px 0"
               }}>
-                <span style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-muted)" }}>Total to Pay:</span>
-                <span style={{ fontSize: "20px", fontWeight: "800", color: "var(--secondary)" }}>
-                  {totalAmount.toFixed(0)} LKR
-                </span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-muted)" }}>Invoice Total:</span>
+                  <span style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-main)" }}>{totalAmount.toFixed(0)} LKR</span>
+                </div>
+                {useAdvanceCredit && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--accent-green)" }}>
+                     <span style={{ fontSize: "13px", fontWeight: "700" }}>Applied Advance Credit:</span>
+                     <span style={{ fontSize: "14px", fontWeight: "700" }}>-{appliedCredit.toFixed(0)} LKR</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px dashed var(--border)", paddingTop: "4px", marginTop: "4px" }}>
+                  <span style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-muted)" }}>Total to Pay:</span>
+                  <span style={{ fontSize: "20px", fontWeight: "800", color: "var(--secondary)" }}>{remainingTotal.toFixed(0)} LKR</span>
+                </div>
               </div>
 
               {paymentMethod === "cash" && (
@@ -1973,10 +2336,10 @@ export default function POSPage() {
                   {/* Quick Select Buttons */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px" }}>
                     {[
-                      { label: "Exact", value: totalAmount },
-                      { label: "+100", value: Math.ceil(totalAmount / 100) * 100 },
-                      { label: "+500", value: Math.ceil(totalAmount / 500) * 500 },
-                      { label: "+1000", value: Math.ceil(totalAmount / 1000) * 1000 },
+                      { label: "Exact", value: remainingTotal },
+                      { label: "+100", value: Math.ceil(remainingTotal / 100) * 100 },
+                      { label: "+500", value: Math.ceil(remainingTotal / 500) * 500 },
+                      { label: "+1000", value: Math.ceil(remainingTotal / 1000) * 1000 },
                       { label: "5000", value: 5000 }
                     ].map((btn, idx) => (
                       <button
@@ -2006,24 +2369,55 @@ export default function POSPage() {
                     <div style={{
                       padding: "12px 16px",
                       borderRadius: "var(--radius-sm)",
-                      background: Number(cashReceived) >= totalAmount ? "var(--accent-green-glow)" : "var(--accent-red-glow)",
-                      border: "1px solid " + (Number(cashReceived) >= totalAmount ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"),
+                      background: Number(cashReceived) >= remainingTotal ? "var(--accent-green-glow)" : "var(--accent-red-glow)",
+                      border: "1px solid " + (Number(cashReceived) >= remainingTotal ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"),
                       textAlign: "center",
                       fontSize: "14px",
                       fontWeight: "700",
                       marginTop: "10px"
                     }}>
-                      {Number(cashReceived) >= totalAmount ? (
+                      {Number(cashReceived) >= remainingTotal ? (
                         <div style={{ color: "var(--accent-green)" }}>
                           <span>Change to Return: </span>
-                          <strong style={{ fontSize: "18px" }}>{(Number(cashReceived) - totalAmount).toFixed(0)} LKR</strong>
+                          <strong style={{ fontSize: "18px" }}>
+                            {applyOverpaymentToOutstanding ? "0 LKR (Applied to Debt)" : `${(Number(cashReceived) - remainingTotal).toFixed(0)} LKR`}
+                          </strong>
                         </div>
                       ) : (
                         <div style={{ color: "var(--accent-orange)" }}>
                           <span>Remaining Debt / Due: </span>
-                          <strong style={{ fontSize: "18px" }}>{(totalAmount - Number(cashReceived)).toFixed(0)} LKR</strong>
+                          <strong style={{ fontSize: "18px" }}>{(remainingTotal - Number(cashReceived)).toFixed(0)} LKR</strong>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Checkbox for applying overpayment in the Modal */}
+                  {selectedCustomer && 
+                   !selectedCustomer.name.toLowerCase().includes("walk-in") && 
+                   !selectedCustomer.name.toLowerCase().includes("unknown") && 
+                   Number(cashReceived || 0) > remainingTotal && (
+                    <div style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: "8px", 
+                      marginTop: "10px", 
+                      padding: "10px 12px", 
+                      background: "rgba(59, 130, 246, 0.08)", 
+                      border: "1px solid rgba(59, 130, 246, 0.25)", 
+                      borderRadius: "8px",
+                      textAlign: "left"
+                    }}>
+                      <input
+                        type="checkbox"
+                        id="modalApplyOverpayment"
+                        checked={applyOverpaymentToOutstanding}
+                        onChange={(e) => setApplyOverpaymentToOutstanding(e.target.checked)}
+                        style={{ cursor: "pointer", width: "16px", height: "16px", flexShrink: 0 }}
+                      />
+                      <label htmlFor="modalApplyOverpayment" style={{ fontSize: "11px", color: "var(--text-main)", cursor: "pointer", fontWeight: 600, userSelect: "none" }}>
+                        Apply extra {(Number(cashReceived) - remainingTotal).toFixed(0)} LKR to outstanding balance (reduce debt)
+                      </label>
                     </div>
                   )}
                 </>
@@ -2158,7 +2552,7 @@ export default function POSPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    window.open(completedOrder.waLink, "_blank");
+                    window.open(completedOrder.waLink, "whatsapp_window");
                   }}
                   className="btn btn-secondary"
                   style={{ 
@@ -2206,6 +2600,146 @@ export default function POSPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* WALK-IN CUSTOMER CAPTURE MODAL */}
+      {showWalkInModal && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel-elevated animate-fade-in" style={styles.modalCard}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Walk-in Customer Details</h3>
+              <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>Optional: Enter phone number to send bill via WhatsApp</p>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              setShowWalkInModal(false);
+              setCashReceived(totalAmount.toFixed(0));
+              setShowCashCalcModal(true);
+            }} style={styles.modalForm}>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Customer Name (Optional)</label>
+                <input 
+                  type="text" 
+                  placeholder="Leave empty to use 'Walk-in Customer'"
+                  className="input-field" 
+                  value={walkInName}
+                  onChange={(e) => setWalkInName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Phone Number (Optional)</label>
+                <input 
+                  type="tel" 
+                  placeholder="e.g. 0771234567 or 94771234567"
+                  className="input-field" 
+                  value={walkInPhone}
+                  onChange={(e) => setWalkInPhone(e.target.value)}
+                />
+                <span style={styles.helpText}>If provided, bill will be sent via WhatsApp</span>
+              </div>
+              <div style={styles.modalBtnRow}>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowWalkInModal(false);
+                    setWalkInName("");
+                    setWalkInPhone("");
+                    setWalkInCheckoutData(null);
+                  }} 
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Proceed to Payment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* RECEIVE ADVANCE MODAL */}
+      {showPOSAdvanceModal && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel-elevated animate-fade-in" style={{ ...styles.modalCard, maxWidth: "400px" }}>
+            <div style={styles.modalHeader}>
+              <h3 style={{ ...styles.modalTitle, display: "flex", alignItems: "center", gap: "8px" }}>
+                💰 Receive Advance Payment
+              </h3>
+              <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                Add funds directly to {selectedCustomer?.name}'s account
+              </p>
+            </div>
+            <form onSubmit={handlePOSRecordAdvance} style={styles.modalForm}>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Advance Amount (LKR) *</label>
+                <input 
+                  type="number" 
+                  required
+                  placeholder="Enter amount"
+                  className="input-field" 
+                  style={{ height: "42px", fontSize: "16px", fontWeight: "700" }}
+                  value={posAdvanceAmount}
+                  onChange={(e) => setPosAdvanceAmount(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Payment Method</label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setPosAdvanceMethod("cash")}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      background: posAdvanceMethod === "cash" ? "var(--secondary-glow)" : "var(--bg-surface-elevated)",
+                      border: "1px solid " + (posAdvanceMethod === "cash" ? "var(--secondary)" : "var(--border)"),
+                      color: posAdvanceMethod === "cash" ? "var(--secondary)" : "var(--text-main)",
+                      borderRadius: "var(--radius-sm)",
+                      fontWeight: "700",
+                      cursor: "pointer"
+                    }}
+                  >
+                    💵 Cash
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPosAdvanceMethod("bank_transfer")}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      background: posAdvanceMethod === "bank_transfer" ? "var(--secondary-glow)" : "var(--bg-surface-elevated)",
+                      border: "1px solid " + (posAdvanceMethod === "bank_transfer" ? "var(--secondary)" : "var(--border)"),
+                      color: posAdvanceMethod === "bank_transfer" ? "var(--secondary)" : "var(--text-main)",
+                      borderRadius: "var(--radius-sm)",
+                      fontWeight: "700",
+                      cursor: "pointer"
+                    }}
+                  >
+                    🏦 Transfer
+                  </button>
+                </div>
+              </div>
+              <div style={styles.modalBtnRow}>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowPOSAdvanceModal(false);
+                    setPosAdvanceAmount("");
+                  }} 
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={savingPOSAdvance} style={{ background: "var(--secondary)", borderColor: "var(--secondary)" }}>
+                  {savingPOSAdvance ? "Saving..." : "Confirm & Issue Receipt"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -2985,5 +3519,27 @@ const styles = {
   clientSelectFooter: {
     display: "flex",
     gap: "12px",
+  },
+  modalForm: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+  },
+  modalInputGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+  },
+  modalLabel: {
+    fontSize: "12px",
+    fontWeight: "600",
+    color: "var(--text-main)",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+  },
+  helpText: {
+    fontSize: "11px",
+    color: "var(--text-muted)",
+    marginTop: "2px",
   },
 };
