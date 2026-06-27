@@ -101,8 +101,7 @@ export default function POSPage() {
 
   // Calculations
   const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
-  const tax = Number((subtotal * 0.08).toFixed(2)); // mock 8% tax matching print shop rates
-  const totalAmount = subtotal + tax;
+  const totalAmount = subtotal;
   const balanceAmount = Math.max(0, totalAmount - Number(paidAmount || 0));
 
   // Sync paid amount based on payment method selection
@@ -1008,14 +1007,6 @@ export default function POSPage() {
 
           {/* Cart Financial Summary & Checkout */}
           <div style={styles.cartTotalsBox}>
-            <div style={styles.totalRow}>
-              <span>Subtotal</span>
-              <span>{subtotal.toFixed(0)} LKR</span>
-            </div>
-            <div style={styles.totalRow}>
-              <span>Tax (8%)</span>
-              <span>{tax.toFixed(0)} LKR</span>
-            </div>
             <div style={styles.grandTotalRow}>
               <span>Total</span>
               <span>{totalAmount.toFixed(0)} LKR</span>
