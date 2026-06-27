@@ -99,18 +99,28 @@ export default function POSPage() {
   const [showCashCalcModal, setShowCashCalcModal] = useState(false);
   const [cashReceived, setCashReceived] = useState("");
 
+  // Credit / Overpaid amount
+  const [creditAmount, setCreditAmount] = useState("");
+
   // Calculations
   const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
   const totalAmount = subtotal;
-  // Allow negative balance — negative means customer paid extra (credit/advance)
-  const balanceAmount = totalAmount - Number(paidAmount || 0);
+  // For overpaid: balance = -(creditAmount). For others: balance = total - paid
+  const balanceAmount = paymentMethod === "overpaid"
+    ? -(Number(creditAmount) || 0)
+    : totalAmount - Number(paidAmount || 0);
 
   // Sync paid amount based on payment method selection
   useEffect(() => {
     if (paymentMethod === "pending") {
       setPaidAmount("0");
+      setCreditAmount("");
+    } else if (paymentMethod === "overpaid") {
+      setPaidAmount(totalAmount.toFixed(0));
+      setCreditAmount("");
     } else if (paymentMethod === "cash" || paymentMethod === "bank_transfer") {
       setPaidAmount(totalAmount.toFixed(0));
+      setCreditAmount("");
     }
   }, [paymentMethod, totalAmount]);
 
@@ -687,6 +697,12 @@ export default function POSPage() {
         const seq = ((countData?.length || 0) + orderStartNumber).toString().padStart(4, "0");
         const orderNum = `${orderPrefix}-${year}-${seq}`;
 
+        // For overpaid: actual paid = total + credit. Balance = -credit.
+        const effectivePaid = paymentMethod === "overpaid"
+          ? totalAmount + (Number(creditAmount) || 0)
+          : Number(paidAmount || 0);
+        const storedMethod = paymentMethod === "overpaid" ? "cash" : paymentMethod;
+
         // 2. Insert Order
         const { data: order, error: oError } = await supabase
           .from("orders")
@@ -694,9 +710,9 @@ export default function POSPage() {
             order_number: orderNum,
             customer_id: customerToUse.id,
             total_amount: totalAmount,
-            paid_amount: Number(paidAmount || 0),
+            paid_amount: effectivePaid,
             balance_amount: balanceAmount,
-            payment_method: paymentMethod,
+            payment_method: storedMethod,
             items: cart.map(item => ({ 
               name: item.name, 
               qty: item.qty, 
@@ -734,7 +750,7 @@ export default function POSPage() {
               customer_name: customerToUse.name,
               customer_phone: customerToUse.phone,
               total_amount: totalAmount,
-              paid_amount: Number(paidAmount || 0),
+              paid_amount: effectivePaid,
               balance_amount: balanceAmount,
               items: cart.map(item => ({ 
                 name: item.name, 
@@ -762,7 +778,7 @@ export default function POSPage() {
             orderNum,
             order.id,
             totalAmount,
-            Number(paidAmount || 0),
+            effectivePaid,
             balanceAmount,
             cart
           );
@@ -771,14 +787,14 @@ export default function POSPage() {
           }
         }
 
-        // Store completed order in state to trigger custom printed bill modal instead of redirecting
+        // Store completed order in state to trigger custom printed bill modal
         setCompletedOrder({
           orderNum,
           orderId: order.id,
           customerName: customerToUse.name,
           customerPhone: customerToUse.phone,
           total: totalAmount,
-          paid: Number(paidAmount || 0),
+          paid: effectivePaid,
           balance: balanceAmount,
           items: cart,
           waLink: waLink
@@ -786,6 +802,7 @@ export default function POSPage() {
 
         setCart([]);
         setPaidAmount("");
+        setCreditAmount("");
         setSelectedCartItemId(null);
       }
     } catch (err) {
@@ -1062,22 +1079,67 @@ export default function POSPage() {
                 >
                   ⏳ Pending
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const isWalkIn = !selectedCustomer || selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown");
+                    if (isWalkIn) {
+                      alert("Overpaid / credit is only allowed for registered customers. Please select a customer first.");
+                      return;
+                    }
+                    setPaymentMethod("overpaid");
+                  }}
+                  style={{
+                    ...styles.methodBtn,
+                    ...(paymentMethod === "overpaid" ? { ...styles.methodBtnActive, background: "rgba(34,197,94,0.18)", borderColor: "var(--accent-green)", color: "var(--accent-green)" } : {}),
+                    ...((!selectedCustomer || selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown")) ? styles.methodBtnDisabled : {})
+                  }}
+                  disabled={cart.length === 0}
+                >
+                  💚 Overpaid
+                </button>
               </div>
             </div>
 
-            {/* Split settlement amount field */}
-            <div style={styles.settleInputContainer}>
-              <span style={styles.settleLabel}>Amount Paid:</span>
-              <input 
-                type="number" 
-                placeholder="LKR Paid"
-                style={styles.settleInput}
-                value={paidAmount}
-                onChange={(e) => setPaidAmount(e.target.value)}
-                disabled={cart.length === 0 || paymentMethod === "pending"}
-              />
-            </div>
-            {paidAmount && (
+            {/* Overpaid: credit input */}
+            {paymentMethod === "overpaid" && (
+              <div style={{ marginTop: "8px", padding: "10px 12px", background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: "8px" }}>
+                <div style={{ fontSize: "11px", color: "var(--accent-green)", fontWeight: 600, marginBottom: "8px" }}>💚 Bill fully paid — enter the extra credit amount received:</div>
+                <div style={styles.settleInputContainer}>
+                  <span style={styles.settleLabel}>Credit Amount:</span>
+                  <input
+                    type="number"
+                    placeholder="Extra LKR received"
+                    style={styles.settleInput}
+                    value={creditAmount}
+                    min={1}
+                    onChange={(e) => setCreditAmount(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                {creditAmount && Number(creditAmount) > 0 && (
+                  <div style={{ fontSize: "12px", color: "var(--accent-green)", marginTop: "6px", fontWeight: 600 }}>
+                    💚 {Number(creditAmount).toFixed(0)} LKR will be saved as account credit for {selectedCustomer?.name}.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Normal paid amount field (not shown for overpaid) */}
+            {paymentMethod !== "overpaid" && (
+              <div style={styles.settleInputContainer}>
+                <span style={styles.settleLabel}>Amount Paid:</span>
+                <input
+                  type="number"
+                  placeholder="LKR Paid"
+                  style={styles.settleInput}
+                  value={paidAmount}
+                  onChange={(e) => setPaidAmount(e.target.value)}
+                  disabled={cart.length === 0 || paymentMethod === "pending"}
+                />
+              </div>
+            )}
+            {paymentMethod !== "overpaid" && paidAmount && (
               <div style={styles.balanceRow}>
                 {balanceAmount > 0 ? (
                   <>
@@ -1086,24 +1148,12 @@ export default function POSPage() {
                       {balanceAmount.toFixed(0)} LKR
                     </span>
                   </>
-                ) : balanceAmount < 0 ? (
-                  <>
-                    <span>💚 Credit to Account:</span>
-                    <span style={{ color: "var(--accent-green)", fontWeight: 700 }}>
-                      {Math.abs(balanceAmount).toFixed(0)} LKR
-                    </span>
-                  </>
-                ) : (
+                ) : balanceAmount === 0 ? (
                   <>
                     <span>Balance Due:</span>
                     <span style={{ color: "var(--accent-green)", fontWeight: 700 }}>Fully Paid ✓</span>
                   </>
-                )}
-              </div>
-            )}
-            {balanceAmount < 0 && (
-              <div style={{ fontSize: "11px", color: "var(--text-muted)", padding: "6px 12px", background: "rgba(34,197,94,0.06)", borderRadius: "6px", border: "1px solid rgba(34,197,94,0.15)", marginTop: "4px" }}>
-                ⓘ The extra <strong style={{ color: "var(--accent-green)" }}>{Math.abs(balanceAmount).toFixed(0)} LKR</strong> will be saved as credit on the customer's account and offset their next bill.
+                ) : null}
               </div>
             )}
           </div>

@@ -22,7 +22,8 @@ import {
   Trash2,
   Pencil,
   Check,
-  X
+  X,
+  Wallet
 } from "lucide-react";
 
 export default function CustomersPage() {
@@ -57,6 +58,12 @@ export default function CustomersPage() {
   const [editEmail, setEditEmail] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Advance Payment States
+  const [showAdvanceModal, setShowAdvanceModal] = useState(false);
+  const [advanceAmount, setAdvanceAmount] = useState("");
+  const [advanceNote, setAdvanceNote] = useState("");
+  const [savingAdvance, setSavingAdvance] = useState(false);
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -295,6 +302,37 @@ export default function CustomersPage() {
       setErrorMsg(err.message || "Failed to update client profile.");
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const handleRecordAdvance = async () => {
+    const amount = parseFloat(advanceAmount);
+    if (!amount || amount <= 0) {
+      setErrorMsg("Please enter a valid advance amount greater than zero.");
+      return;
+    }
+    setSavingAdvance(true);
+    setErrorMsg("");
+    try {
+      const newBalance = Number(selectedCust.outstanding_balance || 0) - amount;
+      const { error } = await supabase
+        .from("customers")
+        .update({ outstanding_balance: newBalance })
+        .eq("id", selectedCust.id);
+      if (error) throw error;
+
+      const updatedCust = { ...selectedCust, outstanding_balance: newBalance };
+      setSelectedCust(updatedCust);
+      setCustomers(prev => prev.map(c => c.id === selectedCust.id ? updatedCust : c));
+      setShowAdvanceModal(false);
+      setAdvanceAmount("");
+      setAdvanceNote("");
+      setSuccessMsg(`Advance of ${amount.toFixed(0)} LKR recorded for ${selectedCust.name}!`);
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to record advance payment.");
+    } finally {
+      setSavingAdvance(false);
     }
   };
 
@@ -616,6 +654,15 @@ export default function CustomersPage() {
                       <span>Edit Profile</span>
                     </button>
 
+                    <button
+                      onClick={() => { setShowAdvanceModal(!showAdvanceModal); setAdvanceAmount(""); setAdvanceNote(""); setErrorMsg(""); }}
+                      className="btn btn-secondary"
+                      style={{ height: "36px", padding: "0 14px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px", borderColor: "rgba(34,197,94,0.4)", color: "var(--accent-green)", background: "rgba(34,197,94,0.06)" }}
+                    >
+                      <Wallet size={14} />
+                      <span>Advance</span>
+                    </button>
+
                     {isAuthorized && (
                       <button
                         onClick={handleDeleteCustomer}
@@ -653,6 +700,61 @@ export default function CustomersPage() {
                       <div>This customer has an <strong>account credit of {formatCurrency(Math.abs(selectedCust.outstanding_balance))}</strong> — will be offset against their next bill.</div>
                     </div>
                   )}
+
+                {/* Advance Payment Modal */}
+                {showAdvanceModal && (
+                  <div style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: "10px", padding: "16px", marginBottom: "12px" }} className="animate-fade-in">
+                    <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--accent-green)", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Wallet size={14} /> Record Advance / Credit Payment
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
+                      This records money paid by the customer in advance — no invoice needed. The amount will be saved as account credit and automatically offset against future bills.
+                    </div>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end" }}>
+                      <div style={{ flex: 1, minWidth: "120px" }}>
+                        <label style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Amount (LKR) *</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          placeholder="e.g. 2000"
+                          min={1}
+                          value={advanceAmount}
+                          onChange={(e) => setAdvanceAmount(e.target.value)}
+                          style={{ width: "100%" }}
+                          autoFocus
+                        />
+                      </div>
+                      <div style={{ flex: 2, minWidth: "160px" }}>
+                        <label style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Note (optional)</label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          placeholder="e.g. Advance for next order"
+                          value={advanceNote}
+                          onChange={(e) => setAdvanceNote(e.target.value)}
+                          style={{ width: "100%" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          onClick={handleRecordAdvance}
+                          disabled={savingAdvance || !advanceAmount}
+                          className="btn btn-primary"
+                          style={{ padding: "8px 16px", fontSize: "12px", height: "auto", display: "flex", alignItems: "center", gap: "4px", background: "var(--accent-green)", borderColor: "var(--accent-green)" }}
+                        >
+                          <Check size={13} />{savingAdvance ? "Saving..." : "Save Credit"}
+                        </button>
+                        <button
+                          onClick={() => setShowAdvanceModal(false)}
+                          className="btn btn-secondary"
+                          style={{ padding: "8px 12px", fontSize: "12px", height: "auto" }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Lifetime Deal Statistics */}
                 <div style={styles.statsGrid}>
