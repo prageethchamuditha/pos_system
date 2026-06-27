@@ -212,6 +212,8 @@ export default function PrintPage() {
           .print-view { display: block !important; }
           .print-root { background: #fff !important; }
           @page { size: A4 portrait; margin: 20mm 15mm; }
+          .desktop-sheet-wrap { padding: 0 !important; }
+          .invoice-wrapper { width: 100% !important; box-shadow: none !important; border: none !important; padding: 0 !important; }
         }
 
         /* ============================================================
@@ -419,8 +421,8 @@ export default function PrintPage() {
         .d-shop-name { font-size: 11px; font-weight: 700; margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.06em; color: #0f172a; }
         .d-shop-sub { font-size: 9px; margin: 0; color: #555; line-height: 1.5; }
         .d-contact-row { margin-top: 5px; font-size: 9px; color: #555; }
-        .d-header-right { display: flex; justify-content: flex-end; align-items: flex-start; }
-        .d-logo { height: 64px; max-width: 130px; object-fit: contain; }
+        .d-header-right { display: flex; justify-content: flex-end; align-items: flex-start; overflow: hidden; max-width: 120px; }
+        .d-logo { height: 60px; max-width: 110px; width: auto; object-fit: contain; display: block; }
 
         /* Separator */
         .d-sep { border: none; border-top: 1.5px solid #0f172a; margin: 8px 0 10px; }
