@@ -211,7 +211,17 @@ export default function PrintPage() {
           .mobile-view { display: none !important; }
           .print-view { display: block !important; }
           .print-root { background: #fff !important; }
-          @page { size: A4 portrait; margin: 20mm 15mm; }
+          @page {
+            size: A4 portrait;
+            margin: 20mm 15mm;
+            /* Suppress browser header/footer injection */
+            @top-left { content: none !important; }
+            @top-center { content: none !important; }
+            @top-right { content: none !important; }
+            @bottom-left { content: none !important; }
+            @bottom-center { content: none !important; }
+            @bottom-right { content: none !important; }
+          }
           .desktop-sheet-wrap { padding: 0 !important; }
           .invoice-wrapper { width: 100% !important; box-shadow: none !important; border: none !important; padding: 0 !important; }
         }
