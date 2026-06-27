@@ -52,7 +52,7 @@ export default function PrintPage() {
     For any issues, inquiries, or assistance, please contact us at +94 70 143 49 49. We are happy to help.
 
 :) Thank you for choosing Print X!`,
-    footerInfo: "Created with Aronium - www.aronium.com"
+    footerInfo: ""
   });
 
   useEffect(() => {
@@ -484,6 +484,7 @@ export default function PrintPage() {
 
         /* Footer */
         .d-footer { border-top: 1px solid #e2e8f0; padding-top: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 8px; color: #aaa; }
+        .d-footer-note { margin-top: 4px; text-align: center; font-size: 7.5px; color: #aaa; font-style: italic; }
       `}</style>
 
       {/* ============================================================
@@ -767,6 +768,11 @@ export default function PrintPage() {
               <span>{shopSettings.name} · {shopSettings.phone} · {shopSettings.email}</span>
               <span>Page 1 of 1</span>
             </div>
+            {shopSettings.footerInfo && (
+              <div className="d-footer-note">
+                {shopSettings.footerInfo}
+              </div>
+            )}
 
           </div>
         </div>

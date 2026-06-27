@@ -68,7 +68,7 @@ export default function SettingsPage() {
     For any issues, inquiries, or assistance, please contact us at +94 70 143 49 49. We are happy to help.
 
 :) Thank you for choosing Print X!`,
-    footerInfo: "Created with Aronium - www.aronium.com"
+    footerInfo: ""
   });
 
   // User Management State
