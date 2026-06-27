@@ -102,7 +102,8 @@ export default function POSPage() {
   // Calculations
   const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
   const totalAmount = subtotal;
-  const balanceAmount = Math.max(0, totalAmount - Number(paidAmount || 0));
+  // Allow negative balance — negative means customer paid extra (credit/advance)
+  const balanceAmount = totalAmount - Number(paidAmount || 0);
 
   // Sync paid amount based on payment method selection
   useEffect(() => {
@@ -625,6 +626,12 @@ export default function POSPage() {
         setSubmitting(false);
         return;
       }
+      // Block credit (overpayment) for walk-in customers
+      if (balanceAmount < 0 && isWalkIn && !isQuotation) {
+        setErrorMsg("Credit/advance payments are only allowed for registered customers. Please select or create a customer profile.");
+        setSubmitting(false);
+        return;
+      }
 
       if (isQuotation) {
         // 1. Generate Quotation ID (count all quotations this year)
@@ -707,13 +714,12 @@ export default function POSPage() {
 
         if (oError) throw oError;
 
-        // 3. Update customer outstanding balance if remaining balance exists
-        if (balanceAmount > 0) {
+        // 3. Update customer outstanding balance for any non-zero balance
+        if (balanceAmount !== 0) {
+          const newOutstanding = Number(customerToUse.outstanding_balance || 0) + balanceAmount;
           const { error: uError } = await supabase
             .from("customers")
-            .update({
-              outstanding_balance: Number(customerToUse.outstanding_balance || 0) + balanceAmount
-            })
+            .update({ outstanding_balance: newOutstanding })
             .eq("id", customerToUse.id);
           if (uError) console.error("Failed to update customer balance:", uError);
         }
@@ -1068,15 +1074,36 @@ export default function POSPage() {
                 style={styles.settleInput}
                 value={paidAmount}
                 onChange={(e) => setPaidAmount(e.target.value)}
-                disabled={cart.length === 0 || paymentMethod === "pending" || (!selectedCustomer || selectedCustomer.name.toLowerCase().includes("walk-in") || selectedCustomer.name.toLowerCase().includes("unknown"))}
+                disabled={cart.length === 0 || paymentMethod === "pending"}
               />
             </div>
             {paidAmount && (
               <div style={styles.balanceRow}>
-                <span>Balance Due:</span>
-                <span style={{ color: balanceAmount > 0 ? "var(--accent-orange)" : "var(--accent-green)" }}>
-                  {balanceAmount.toFixed(0)} LKR
-                </span>
+                {balanceAmount > 0 ? (
+                  <>
+                    <span>Balance Due:</span>
+                    <span style={{ color: "var(--accent-orange)", fontWeight: 700 }}>
+                      {balanceAmount.toFixed(0)} LKR
+                    </span>
+                  </>
+                ) : balanceAmount < 0 ? (
+                  <>
+                    <span>💚 Credit to Account:</span>
+                    <span style={{ color: "var(--accent-green)", fontWeight: 700 }}>
+                      {Math.abs(balanceAmount).toFixed(0)} LKR
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>Balance Due:</span>
+                    <span style={{ color: "var(--accent-green)", fontWeight: 700 }}>Fully Paid ✓</span>
+                  </>
+                )}
+              </div>
+            )}
+            {balanceAmount < 0 && (
+              <div style={{ fontSize: "11px", color: "var(--text-muted)", padding: "6px 12px", background: "rgba(34,197,94,0.06)", borderRadius: "6px", border: "1px solid rgba(34,197,94,0.15)", marginTop: "4px" }}>
+                ⓘ The extra <strong style={{ color: "var(--accent-green)" }}>{Math.abs(balanceAmount).toFixed(0)} LKR</strong> will be saved as credit on the customer's account and offset their next bill.
               </div>
             )}
           </div>

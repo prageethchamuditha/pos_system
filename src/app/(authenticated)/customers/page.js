@@ -566,6 +566,9 @@ export default function CustomersPage() {
                         {cust.outstanding_balance > 0 && (
                           <span style={styles.custRowBalanceBadge}>{cust.outstanding_balance} LKR</span>
                         )}
+                        {cust.outstanding_balance < 0 && (
+                          <span style={{ ...styles.custRowBalanceBadge, background: "rgba(34,197,94,0.15)", color: "var(--accent-green)", borderColor: "rgba(34,197,94,0.3)" }}>💚 {Math.abs(cust.outstanding_balance)} CR</span>
+                        )}
                       </div>
                       <div style={styles.custRowPhone}>{cust.phone}</div>
                     </div>
@@ -637,11 +640,17 @@ export default function CustomersPage() {
                     )}
                   </div>
                 </div>
-                  {/* Outstanding Warning */}
+                  {/* Outstanding Warning / Credit Banner */}
                   {selectedCust.outstanding_balance > 0 && (
                     <div style={styles.alertCard}>
                       <AlertTriangle size={16} />
                       <div>Outstanding balance of {formatCurrency(selectedCust.outstanding_balance)} pending collection.</div>
+                    </div>
+                  )}
+                  {selectedCust.outstanding_balance < 0 && (
+                    <div style={{ ...styles.alertCard, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", color: "var(--accent-green)" }}>
+                      <span style={{ fontSize: "16px" }}>💚</span>
+                      <div>This customer has an <strong>account credit of {formatCurrency(Math.abs(selectedCust.outstanding_balance))}</strong> — will be offset against their next bill.</div>
                     </div>
                   )}
 
@@ -658,9 +667,11 @@ export default function CustomersPage() {
                     <span style={styles.statSub}>Total paid to date</span>
                   </div>
                   <div style={styles.statCard}>
-                    <span style={styles.statLabel}>Outstanding Balance</span>
-                    <span style={{ ...styles.statValue, color: totalOutstanding > 0 ? "var(--accent-orange)" : "var(--text-main)" }}>{formatCurrency(totalOutstanding)}</span>
-                    <span style={styles.statSub}>Pending collection</span>
+                    <span style={styles.statLabel}>{totalOutstanding < 0 ? "Account Credit" : "Outstanding Balance"}</span>
+                    <span style={{ ...styles.statValue, color: totalOutstanding < 0 ? "var(--accent-green)" : totalOutstanding > 0 ? "var(--accent-orange)" : "var(--text-main)" }}>
+                      {totalOutstanding < 0 ? `${formatCurrency(Math.abs(totalOutstanding))} CR` : formatCurrency(totalOutstanding)}
+                    </span>
+                    <span style={styles.statSub}>{totalOutstanding < 0 ? "Credit on account" : "Pending collection"}</span>
                   </div>
                   <div style={styles.statCard}>
                     <span style={styles.statLabel}>Transactions</span>
