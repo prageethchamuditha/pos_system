@@ -18,7 +18,8 @@ import {
   Calendar,
   Lock,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  WifiOff
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -32,6 +33,8 @@ export default function DashboardPage() {
   const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Day End State Variables
   const [showDayEndModal, setShowDayEndModal] = useState(false);
@@ -244,8 +247,9 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (attempt = 0) => {
     try {
+      setFetchError(false);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -307,8 +311,18 @@ export default function DashboardPage() {
         customersCount: customersCount || 0,
       });
       setRecentOrders(recent || []);
+      setFetchError(false);
     } catch (err) {
       console.error("Dashboard Loading Error:", err.message);
+      // Auto-retry up to 3 times with 2s delay for network errors
+      if (attempt < 3 && (err.message?.includes("fetch") || err.message?.includes("network") || err.message?.includes("Failed"))) {
+        setTimeout(() => {
+          setRetryCount(attempt + 1);
+          fetchDashboardData(attempt + 1);
+        }, 2000);
+      } else {
+        setFetchError(true);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

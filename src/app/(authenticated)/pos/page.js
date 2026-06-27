@@ -225,31 +225,57 @@ export default function POSPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [cart, showSelectCustModal, isLocked, showCustModal, showCustomModal, completedOrder, showDiscountModal, showCashCalcModal, totalAmount]);
 
-  // Load products dynamically from settings (localStorage) or fallback to defaults
   const [products, setProducts] = useState([]);
 
   useEffect(() => {
-    try {
-      const savedProducts = localStorage.getItem("printx_pos_products");
-      if (savedProducts) {
-        setProducts(JSON.parse(savedProducts));
-      } else {
-        const defaultProducts = [
-          { id: "p1", name: "Business Cards (x500)", price: 3500, category: "Cards" },
-          { id: "p2", name: "Flex Banner (per sqft)", price: 150, category: "Banners" },
-          { id: "p3", name: "Sticker Sheet (A3)", price: 250, category: "Stickers" },
-          { id: "p4", name: "Brochure (A4 Tri-fold)", price: 80, category: "Documents" },
-          { id: "p5", name: "A4 Document Print (B&W)", price: 15, category: "Documents" },
-          { id: "p6", name: "A4 Color Document Print", price: 40, category: "Documents" },
-          { id: "p7", name: "ID Card Print & Lanyard", price: 350, category: "Cards" },
-          { id: "p8", name: "Letterhead Printing (x100)", price: 1800, category: "Documents" },
-        ];
-        setProducts(defaultProducts);
-        localStorage.setItem("printx_pos_products", JSON.stringify(defaultProducts));
+    const defaultProducts = [
+      { id: "p1", name: "Business Cards (x500)", price: 3500, category: "Cards" },
+      { id: "p2", name: "Flex Banner (per sqft)", price: 150, category: "Banners" },
+      { id: "p3", name: "Sticker Sheet (A3)", price: 250, category: "Stickers" },
+      { id: "p4", name: "Brochure (A4 Tri-fold)", price: 80, category: "Documents" },
+      { id: "p5", name: "A4 Document Print (B&W)", price: 15, category: "Documents" },
+      { id: "p6", name: "A4 Color Document Print", price: 40, category: "Documents" },
+      { id: "p7", name: "ID Card Print & Lanyard", price: 350, category: "Cards" },
+      { id: "p8", name: "Letterhead Printing (x100)", price: 1800, category: "Documents" },
+    ];
+
+    const loadProducts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("catalog_items")
+          .select("*")
+          .order("created_at", { ascending: true });
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const loadedProducts = data.map(item => ({
+            id: item.id,
+            name: item.name,
+            price: Number(item.price),
+            category: item.category || "Uncategorized"
+          }));
+          setProducts(loadedProducts);
+          localStorage.setItem("printx_pos_products", JSON.stringify(loadedProducts));
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to load POS catalog items from DB:", err);
       }
-    } catch (e) {
-      console.error("Failed to load POS catalog items:", e);
-    }
+
+      try {
+        const savedProducts = localStorage.getItem("printx_pos_products");
+        if (savedProducts) {
+          setProducts(JSON.parse(savedProducts));
+        } else {
+          setProducts(defaultProducts);
+          localStorage.setItem("printx_pos_products", JSON.stringify(defaultProducts));
+        }
+      } catch (e) {
+        console.error("Failed to load POS catalog items:", e);
+        setProducts(defaultProducts);
+      }
+    };
+
+    loadProducts();
   }, []);
 
   // Compute categories dynamically based on products array to support user-added categories

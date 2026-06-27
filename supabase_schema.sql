@@ -84,7 +84,20 @@ create policy "Allow all actions on quotations for authenticated users" on publi
 create policy "Allow read on quotations for public anonymous access (portal views)" on public.quotations
     for select to anon using (true);
 
--- 5. DAY END REPORTS TABLE (Daily shifts)
+-- 5. CATALOG ITEMS TABLE (Shared POS catalog)
+create table if not exists public.catalog_items (
+    id text primary key,
+    name text not null,
+    category text,
+    price numeric not null,
+    created_at timestamp with time zone default now()
+);
+
+alter table public.catalog_items enable row level security;
+create policy "Allow all actions on catalog_items for authenticated users" on public.catalog_items
+    for all to authenticated using (true) with check (true);
+
+-- 6. DAY END REPORTS TABLE (Daily shifts)
 create table if not exists public.day_end_reports (
     id uuid primary key default gen_random_uuid(),
     date date not null unique,

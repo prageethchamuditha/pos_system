@@ -112,6 +112,17 @@ export default function SettingsPage() {
   const [confirmPasswordVal, setConfirmPasswordVal] = useState("");
   const [submittingPassword, setSubmittingPassword] = useState(false);
 
+  const defaultProducts = [
+    { id: "p1", name: "Business Cards (x500)", price: 3500, category: "Cards" },
+    { id: "p2", name: "Flex Banner (per sqft)", price: 150, category: "Banners" },
+    { id: "p3", name: "Sticker Sheet (A3)", price: 250, category: "Stickers" },
+    { id: "p4", name: "Brochure (A4 Tri-fold)", price: 80, category: "Documents" },
+    { id: "p5", name: "A4 Document Print (B&W)", price: 15, category: "Documents" },
+    { id: "p6", name: "A4 Color Document Print", price: 40, category: "Documents" },
+    { id: "p7", name: "ID Card Print & Lanyard", price: 350, category: "Cards" },
+    { id: "p8", name: "Letterhead Printing (x100)", price: 1800, category: "Documents" },
+  ];
+
   useEffect(() => {
     // Redirect staff users to catalog or security tab automatically
     if (profile && profile.role === "staff" && activeTab !== "catalog" && activeTab !== "security") {
@@ -128,34 +139,50 @@ export default function SettingsPage() {
       console.error(e);
     }
 
-    loadProducts();
+    const initialize = async () => {
+      await loadProducts();
+    };
+
+    initialize();
 
     if (activeTab === "users" && (!profile || profile.role !== "staff")) {
       fetchProfiles();
     }
   }, [activeTab, profile]);
 
-  const loadProducts = () => {
+  const loadProducts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("catalog_items")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const loadedProducts = data.map(item => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.price),
+          category: item.category || "Uncategorized"
+        }));
+        setProducts(loadedProducts);
+        localStorage.setItem("printx_pos_products", JSON.stringify(loadedProducts));
+        return;
+      }
+    } catch (err) {
+      console.error("Error loading products from DB:", err);
+    }
+
     try {
       const savedProducts = localStorage.getItem("printx_pos_products");
       if (savedProducts) {
         setProducts(JSON.parse(savedProducts));
       } else {
-        const defaultProducts = [
-          { id: "p1", name: "Business Cards (x500)", price: 3500, category: "Cards" },
-          { id: "p2", name: "Flex Banner (per sqft)", price: 150, category: "Banners" },
-          { id: "p3", name: "Sticker Sheet (A3)", price: 250, category: "Stickers" },
-          { id: "p4", name: "Brochure (A4 Tri-fold)", price: 80, category: "Documents" },
-          { id: "p5", name: "A4 Document Print (B&W)", price: 15, category: "Documents" },
-          { id: "p6", name: "A4 Color Document Print", price: 40, category: "Documents" },
-          { id: "p7", name: "ID Card Print & Lanyard", price: 350, category: "Cards" },
-          { id: "p8", name: "Letterhead Printing (x100)", price: 1800, category: "Documents" },
-        ];
         setProducts(defaultProducts);
         localStorage.setItem("printx_pos_products", JSON.stringify(defaultProducts));
       }
     } catch (err) {
       console.error("Error loading products:", err);
+      setProducts(defaultProducts);
     }
   };
 
@@ -505,7 +532,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveProduct = (e) => {
+  const handleSaveProduct = async (e) => {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
@@ -519,38 +546,85 @@ export default function SettingsPage() {
       return;
     }
 
+    const productData = {
+      name: newProductName.trim(),
+      price: Number(newProductPrice),
+      category: newProductCategory.trim() || "Uncategorized"
+    };
+
     try {
       let updatedProducts;
       if (editingProductId) {
-        // Edit existing product
-        updatedProducts = products.map(p => 
-          p.id === editingProductId 
-            ? { ...p, name: newProductName.trim(), price: Number(newProductPrice), category: newProductCategory.trim() || "Uncategorized" }
+        const { error } = await supabase
+          .from("catalog_items")
+          .update(productData)
+          .eq("id", editingProductId);
+
+        if (error) {
+          throw error;
+        }
+
+        updatedProducts = products.map(p =>
+          p.id === editingProductId
+            ? { ...p, ...productData }
             : p
         );
         setSuccessMsg("Product updated successfully!");
       } else {
-        // Add new product
         const newProduct = {
           id: "p_" + Math.random().toString(36).substring(2, 9),
-          name: newProductName.trim(),
-          price: Number(newProductPrice),
-          category: newProductCategory.trim() || "Uncategorized"
+          ...productData
         };
+
+        const { error } = await supabase
+          .from("catalog_items")
+          .insert(newProduct);
+
+        if (error) {
+          throw error;
+        }
+
         updatedProducts = [...products, newProduct];
         setSuccessMsg("Product added to POS catalog!");
       }
 
       setProducts(updatedProducts);
       localStorage.setItem("printx_pos_products", JSON.stringify(updatedProducts));
-      
-      // Clear form
+
       setNewProductName("");
       setNewProductPrice("");
       setNewProductCategory("");
       setEditingProductId(null);
     } catch (err) {
-      setErrorMsg("Failed to save product.");
+      console.error("Failed to sync product to cloud database:", err);
+      try {
+        let updatedProducts;
+        if (editingProductId) {
+          updatedProducts = products.map(p =>
+            p.id === editingProductId
+              ? { ...p, ...productData }
+              : p
+          );
+          setSuccessMsg("Product updated successfully! (saved locally)");
+        } else {
+          const newProduct = {
+            id: "p_" + Math.random().toString(36).substring(2, 9),
+            ...productData
+          };
+          updatedProducts = [...products, newProduct];
+          setSuccessMsg("Product added to POS catalog! (saved locally)");
+        }
+        setProducts(updatedProducts);
+        localStorage.setItem("printx_pos_products", JSON.stringify(updatedProducts));
+
+        setNewProductName("");
+        setNewProductPrice("");
+        setNewProductCategory("");
+        setEditingProductId(null);
+      } catch (storageErr) {
+        console.error("Local save failed:", storageErr);
+        setErrorMsg("Failed to save product.");
+      }
     }
   };
 
@@ -561,15 +635,23 @@ export default function SettingsPage() {
     setEditingProductId(product.id);
   };
 
-  const handleDeleteProduct = (productId) => {
+  const handleDeleteProduct = async (productId) => {
     if (confirm("Are you sure you want to delete this product from the POS catalog?")) {
       try {
+        const { error } = await supabase
+          .from("catalog_items")
+          .delete()
+          .eq("id", productId);
+
+        if (error) {
+          throw error;
+        }
+
         const updated = products.filter(p => p.id !== productId);
         setProducts(updated);
         localStorage.setItem("printx_pos_products", JSON.stringify(updated));
         setSuccessMsg("Product deleted from catalog.");
-        
-        // Reset form if we were editing this product
+
         if (editingProductId === productId) {
           setNewProductName("");
           setNewProductPrice("");
@@ -577,26 +659,55 @@ export default function SettingsPage() {
           setEditingProductId(null);
         }
       } catch (err) {
-        setErrorMsg("Failed to delete product.");
+        console.error("Failed to sync delete to cloud database:", err);
+        try {
+          const updated = products.filter(p => p.id !== productId);
+          setProducts(updated);
+          localStorage.setItem("printx_pos_products", JSON.stringify(updated));
+          setSuccessMsg("Product deleted from catalog. (saved locally)");
+
+          if (editingProductId === productId) {
+            setNewProductName("");
+            setNewProductPrice("");
+            setNewProductCategory("");
+            setEditingProductId(null);
+          }
+        } catch (storageErr) {
+          console.error("Local delete failed:", storageErr);
+          setErrorMsg("Failed to delete product.");
+        }
       }
     }
   };
 
-  const handleResetCatalog = () => {
+  const handleResetCatalog = async () => {
     if (confirm("Are you sure you want to restore the default catalog items? This will overwrite your current items.")) {
       try {
-        localStorage.removeItem("printx_pos_products");
-        loadProducts();
-        setSuccessMsg("POS catalog restored to default items.");
-        
-        // Reset form
-        setNewProductName("");
-        setNewProductPrice("");
-        setNewProductCategory("");
-        setEditingProductId(null);
+        const { error } = await supabase
+          .from("catalog_items")
+          .delete();
+
+        if (error) {
+          throw error;
+        }
       } catch (err) {
+        console.error("Failed to reset catalog in DB:", err);
+      }
+
+      try {
+        localStorage.removeItem("printx_pos_products");
+        setProducts(defaultProducts);
+        localStorage.setItem("printx_pos_products", JSON.stringify(defaultProducts));
+        setSuccessMsg("POS catalog restored to default items.");
+      } catch (err) {
+        console.error("Failed to restore default items locally:", err);
         setErrorMsg("Failed to restore default items.");
       }
+
+      setNewProductName("");
+      setNewProductPrice("");
+      setNewProductCategory("");
+      setEditingProductId(null);
     }
   };
 
