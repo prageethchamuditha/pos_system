@@ -39,6 +39,7 @@ export default function DashboardPage() {
   // Day End State Variables
   const [showDayEndModal, setShowDayEndModal] = useState(false);
   const [copyCount, setCopyCount] = useState("");
+  const [manualBillingAmount, setManualBillingAmount] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseReason, setExpenseReason] = useState("");
   const [expenseStaff, setExpenseStaff] = useState("");
@@ -58,9 +59,17 @@ export default function DashboardPage() {
 
   const handleDayEndSubmit = async (e) => {
     e.preventDefault();
+    if (!copyCount) {
+      setDayEndError("Please enter the copy count meter reading.");
+      return;
+    }
+    if (!manualBillingAmount) {
+      setDayEndError("Please enter the manually counted billing price.");
+      return;
+    }
+    setSubmittingDayEnd(true);
     setDayEndError("");
     setDayEndSuccess("");
-    setSubmittingDayEnd(true);
 
     try {
       const today = new Date();
@@ -101,6 +110,7 @@ export default function DashboardPage() {
           total_cash_payments: totalCashPayments,
           total_outstanding: totalOutstanding,
           net_drawer_cash: netDrawerCash,
+          manual_billing_amount: Number(manualBillingAmount),
           created_by: profile?.username || "Unknown",
         });
 
@@ -122,6 +132,7 @@ export default function DashboardPage() {
             total_cash_payments: totalCashPayments,
             total_outstanding: totalOutstanding,
             net_drawer_cash: netDrawerCash,
+            manual_billing_amount: Number(manualBillingAmount),
             staff_name: profile?.full_name || profile?.username || "Unknown",
             username: profile?.username || "Unknown",
             status: "DAY_END"
@@ -135,6 +146,7 @@ export default function DashboardPage() {
       setTimeout(() => {
         setShowDayEndModal(false);
         setCopyCount("");
+        setManualBillingAmount("");
         setExpenseAmount("");
         setExpenseReason("");
         setExpenseStaff("");
@@ -665,6 +677,20 @@ export default function DashboardPage() {
                   style={{ height: "40px", fontSize: "14px", width: "100%" }}
                   value={copyCount}
                   onChange={(e) => setCopyCount(e.target.value)}
+                  required
+                  disabled={submittingDayEnd}
+                />
+              </div>
+
+              <div style={styles.modalInputGroup}>
+                <label style={styles.modalLabel}>Actual Billing Price / Cash in Hand (LKR) *</label>
+                <input
+                  type="number"
+                  placeholder="Enter manually counted cash / billing price"
+                  className="input-field"
+                  style={{ height: "40px", fontSize: "14px", width: "100%" }}
+                  value={manualBillingAmount}
+                  onChange={(e) => setManualBillingAmount(e.target.value)}
                   required
                   disabled={submittingDayEnd}
                 />

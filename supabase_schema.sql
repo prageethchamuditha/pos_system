@@ -109,6 +109,7 @@ create table if not exists public.day_end_reports (
     total_cash_payments numeric not null default 0,
     total_outstanding numeric not null default 0,
     net_drawer_cash numeric not null default 0,
+    manual_billing_amount numeric not null default 0,
     created_by text,
     created_at timestamp with time zone default now()
 );

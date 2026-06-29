@@ -737,7 +737,9 @@ export default function ReportsPage() {
                         <th style={styles.th}>Date</th>
                         <th style={styles.th}>Logged By</th>
                         <th style={{ ...styles.th, textAlign: "right" }}>Copy Count</th>
-                        <th style={{ ...styles.th, textAlign: "right" }}>Sales Total</th>
+                        <th style={{ ...styles.th, textAlign: "right" }}>Sales Total (Auto)</th>
+                        <th style={{ ...styles.th, textAlign: "right" }}>Billing Price (Manual)</th>
+                        <th style={{ ...styles.th, textAlign: "right" }}>Discrepancy</th>
                         <th style={{ ...styles.th, textAlign: "right" }}>Collections</th>
                         <th style={{ ...styles.th, textAlign: "right" }}>Expenses / Withdrawals</th>
                         <th style={{ ...styles.th, textAlign: "right" }}>Net Drawer Cash</th>
@@ -746,7 +748,7 @@ export default function ReportsPage() {
                     <tbody>
                       {dayEndReports.length === 0 ? (
                         <tr>
-                          <td colSpan="7" style={styles.emptyRow}>No Day End reports submitted yet.</td>
+                          <td colSpan="9" style={styles.emptyRow}>No Day End reports submitted yet.</td>
                         </tr>
                       ) : (
                         dayEndReports.map((report) => (
@@ -755,6 +757,27 @@ export default function ReportsPage() {
                             <td style={styles.td}>{report.created_by}</td>
                             <td style={{ ...styles.td, textAlign: "right", fontWeight: "600", color: "var(--secondary)" }}>{report.copy_count}</td>
                             <td style={{ ...styles.td, textAlign: "right" }}>{formatCurrency(report.total_sales || 0)}</td>
+                            <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>
+                              {report.manual_billing_amount !== null && report.manual_billing_amount !== undefined ? (
+                                formatCurrency(report.manual_billing_amount)
+                              ) : (
+                                <span style={{ color: "var(--text-subtle)", fontStyle: "italic" }}>N/A</span>
+                              )}
+                            </td>
+                            <td style={{ ...styles.td, textAlign: "right" }}>
+                              {report.manual_billing_amount !== null && report.manual_billing_amount !== undefined ? (() => {
+                                const diff = Number(report.manual_billing_amount) - Number(report.total_sales || 0);
+                                if (diff === 0) {
+                                  return <span style={{ color: "var(--accent-green)", fontWeight: "700" }}>✅ Match</span>;
+                                } else if (diff > 0) {
+                                  return <span style={{ color: "var(--accent-green)", fontWeight: "700" }}>+{formatCurrency(diff)}</span>;
+                                } else {
+                                  return <span style={{ color: "var(--accent-red)", fontWeight: "700" }}>{formatCurrency(diff)}</span>;
+                                }
+                              })() : (
+                                <span style={{ color: "var(--text-subtle)", fontStyle: "italic" }}>N/A</span>
+                              )}
+                            </td>
                             <td style={{ ...styles.td, textAlign: "right", color: "var(--accent-green)" }}>{formatCurrency(report.total_cash_payments || 0)}</td>
                             <td style={{ ...styles.td, textAlign: "right" }}>
                               {report.expense_amount > 0 ? (
@@ -812,7 +835,15 @@ export default function ReportsPage() {
                             <td style={{ ...styles.td, textAlign: "right", fontWeight: "600", color: "var(--accent-green)" }}>{formatCurrency(report.entered_monthly_total || 0)}</td>
                             <td style={{ ...styles.td, textAlign: "right", color: "var(--text-muted)" }}>{formatCurrency(report.calculated_weekly_revenue || 0)}</td>
                             <td style={styles.td}>
-                              <span className="badge badge-paid">Verified & Closed</span>
+                              {Number(report.entered_monthly_total) === Number(report.calculated_weekly_revenue) ? (
+                                <span className="badge badge-paid" style={{ background: "rgba(34, 197, 94, 0.1)", color: "var(--accent-green)", borderColor: "rgba(34, 197, 94, 0.2)" }}>
+                                  Verified & Match
+                                </span>
+                              ) : (
+                                <span className="badge" style={{ background: "rgba(239, 68, 68, 0.15)", color: "var(--accent-red)", borderColor: "rgba(239, 68, 68, 0.3)" }}>
+                                  Discrepancy (Review)
+                                </span>
+                              )}
                             </td>
                           </tr>
                         ))
