@@ -683,10 +683,10 @@ export default function DashboardPage() {
               </div>
 
               <div style={styles.modalInputGroup}>
-                <label style={styles.modalLabel}>Actual Billing Price / Cash in Hand (LKR) *</label>
+                <label style={styles.modalLabel}>Manually Counted Day Balance (LKR) *</label>
                 <input
                   type="number"
-                  placeholder="Enter manually counted cash / billing price"
+                  placeholder="Enter manually counted day balance"
                   className="input-field"
                   style={{ height: "40px", fontSize: "14px", width: "100%" }}
                   value={manualBillingAmount}
