@@ -738,9 +738,10 @@ export default function ReportsPage() {
                         <th style={styles.th}>Logged By</th>
                         <th style={{ ...styles.th, textAlign: "right" }}>Copy Count</th>
                         <th style={{ ...styles.th, textAlign: "right" }}>Sales Total (Auto)</th>
-                        <th style={{ ...styles.th, textAlign: "right" }}>Billing Price (Manual)</th>
-                        <th style={{ ...styles.th, textAlign: "right" }}>Discrepancy</th>
-                        <th style={{ ...styles.th, textAlign: "right" }}>Collections</th>
+                        <th style={{ ...styles.th, textAlign: "right" }}>Collections (Auto Cash)</th>
+                        <th style={{ ...styles.th, textAlign: "right" }}>Billing Price (Manual Cash)</th>
+                        <th style={{ ...styles.th, textAlign: "right" }}>Discrepancy (Cash)</th>
+                        <th style={{ ...styles.th, textAlign: "right" }}>Pending Today (Auto)</th>
                         <th style={{ ...styles.th, textAlign: "right" }}>Expenses / Withdrawals</th>
                         <th style={{ ...styles.th, textAlign: "right" }}>Net Drawer Cash</th>
                       </tr>
@@ -748,7 +749,7 @@ export default function ReportsPage() {
                     <tbody>
                       {dayEndReports.length === 0 ? (
                         <tr>
-                          <td colSpan="9" style={styles.emptyRow}>No Day End reports submitted yet.</td>
+                          <td colSpan="10" style={styles.emptyRow}>No Day End reports submitted yet.</td>
                         </tr>
                       ) : (
                         dayEndReports.map((report) => (
@@ -757,6 +758,7 @@ export default function ReportsPage() {
                             <td style={styles.td}>{report.created_by}</td>
                             <td style={{ ...styles.td, textAlign: "right", fontWeight: "600", color: "var(--secondary)" }}>{report.copy_count}</td>
                             <td style={{ ...styles.td, textAlign: "right" }}>{formatCurrency(report.total_sales || 0)}</td>
+                            <td style={{ ...styles.td, textAlign: "right", color: "var(--accent-green)" }}>{formatCurrency(report.total_cash_payments || 0)}</td>
                             <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>
                               {report.manual_billing_amount !== null && report.manual_billing_amount !== undefined ? (
                                 formatCurrency(report.manual_billing_amount)
@@ -766,7 +768,7 @@ export default function ReportsPage() {
                             </td>
                             <td style={{ ...styles.td, textAlign: "right" }}>
                               {report.manual_billing_amount !== null && report.manual_billing_amount !== undefined ? (() => {
-                                const diff = Number(report.manual_billing_amount) - Number(report.total_sales || 0);
+                                const diff = Number(report.manual_billing_amount) - Number(report.total_cash_payments || 0);
                                 if (diff === 0) {
                                   return <span style={{ color: "var(--accent-green)", fontWeight: "700" }}>✅ Match</span>;
                                 } else if (diff > 0) {
@@ -778,7 +780,7 @@ export default function ReportsPage() {
                                 <span style={{ color: "var(--text-subtle)", fontStyle: "italic" }}>N/A</span>
                               )}
                             </td>
-                            <td style={{ ...styles.td, textAlign: "right", color: "var(--accent-green)" }}>{formatCurrency(report.total_cash_payments || 0)}</td>
+                            <td style={{ ...styles.td, textAlign: "right", color: "var(--accent-orange)", fontWeight: "600" }}>{formatCurrency(report.total_outstanding || 0)}</td>
                             <td style={{ ...styles.td, textAlign: "right" }}>
                               {report.expense_amount > 0 ? (
                                 <div style={{ color: "var(--accent-red)" }}>
