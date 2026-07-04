@@ -695,6 +695,7 @@ export default function POSPage() {
           total_amount: amount,
           paid_amount: amount,
           balance_amount: 0,
+          status: "paid",
           payment_method: posAdvanceMethod,
           items: [{ name: "Advance Payment", qty: 1, price: amount, total: amount }],
           created_by: profile?.username || "Unknown",
@@ -947,6 +948,13 @@ export default function POSPage() {
 
         const storedMethod = paymentMethod === "overpaid" ? "cash" : (useAdvanceCredit && remainingTotal === 0 ? "advance_deduction" : paymentMethod);
 
+        let orderStatus = "pending";
+        if (checkoutBalance <= 0) {
+          orderStatus = "paid";
+        } else if (effectivePaid > 0) {
+          orderStatus = "partially_paid";
+        }
+
         // 2. Insert Order
         const { data: order, error: oError } = await supabase
           .from("orders")
@@ -956,6 +964,7 @@ export default function POSPage() {
             total_amount: totalAmount,
             paid_amount: effectivePaid,
             balance_amount: checkoutBalance,
+            status: orderStatus,
             payment_method: storedMethod,
             items: cart.map(item => ({ 
               name: item.name, 
