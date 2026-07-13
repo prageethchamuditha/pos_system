@@ -22,6 +22,13 @@ import {
   WifiOff
 } from "lucide-react";
 
+const getLocalDateString = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function DashboardPage() {
   const { profile } = useAuth();
   const [stats, setStats] = useState({
@@ -101,7 +108,7 @@ export default function DashboardPage() {
       const { error: insertError } = await supabase
         .from("day_end_reports")
         .insert({
-          date: today.toISOString().split("T")[0],
+          date: getLocalDateString(today),
           copy_count: Number(copyCount),
           expense_amount: Number(expenseAmount || 0),
           expense_reason: expenseReason || "",
@@ -123,7 +130,7 @@ export default function DashboardPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "DAY_END",
-            date: today.toISOString().split("T")[0],
+            date: getLocalDateString(today),
             copy_count: Number(copyCount),
             expense_amount: Number(expenseAmount || 0),
             expense_reason: expenseReason || "",
@@ -216,7 +223,7 @@ export default function DashboardPage() {
       const { error: insertError } = await supabase
         .from("weekend_reports")
         .insert({
-          date: new Date().toISOString().split("T")[0],
+          date: getLocalDateString(),
           entered_monthly_total: Number(monthlyTotal),
           calculated_weekly_revenue: calculatedWeeklyIncome,
           created_by: profile?.username || "Unknown",
@@ -231,7 +238,7 @@ export default function DashboardPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "WEEK_END",
-            date: new Date().toISOString().split("T")[0],
+            date: getLocalDateString(),
             entered_monthly_total: Number(monthlyTotal),
             calculated_weekly_revenue: calculatedWeeklyIncome,
             staff_name: profile?.full_name || profile?.username || "Unknown",
