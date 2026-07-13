@@ -71,6 +71,22 @@ export default function CustomersPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
+  // Order/Quote details popup states
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
+  const [selectedQuoteDetails, setSelectedQuoteDetails] = useState(null);
+  const [showOrderDetailsModal, setShowOrderDetailsModal] = useState(false);
+  const [showQuoteDetailsModal, setShowQuoteDetailsModal] = useState(false);
+
+  const handleOpenOrderDetails = (order) => {
+    setSelectedOrderDetails(order);
+    setShowOrderDetailsModal(true);
+  };
+
+  const handleOpenQuoteDetails = (quote) => {
+    setSelectedQuoteDetails(quote);
+    setShowQuoteDetailsModal(true);
+  };
+
   useEffect(() => {
     fetchCustomers();
   }, []);
@@ -1019,7 +1035,17 @@ export default function CustomersPage() {
                             custOrders.map(order => (
                               <div key={order.id} style={styles.historyRow}>
                                 <div>
-                                  <div style={styles.historyRowTitle}>{order.order_number}</div>
+                                  <div 
+                                    onClick={() => handleOpenOrderDetails(order)}
+                                    style={{ 
+                                      ...styles.historyRowTitle, 
+                                      cursor: "pointer", 
+                                      color: "var(--primary)",
+                                      textDecoration: "underline" 
+                                    }}
+                                  >
+                                    {order.order_number}
+                                  </div>
                                   <div style={styles.historyRowDate}>
                                     {new Date(order.created_at).toLocaleDateString()}
                                   </div>
@@ -1049,7 +1075,17 @@ export default function CustomersPage() {
                             custQuotes.map(quote => (
                               <div key={quote.id} style={styles.historyRow}>
                                 <div>
-                                  <div style={styles.historyRowTitle}>{quote.quotation_number}</div>
+                                  <div 
+                                    onClick={() => handleOpenQuoteDetails(quote)}
+                                    style={{ 
+                                      ...styles.historyRowTitle, 
+                                      cursor: "pointer", 
+                                      color: "var(--primary)",
+                                      textDecoration: "underline" 
+                                    }}
+                                  >
+                                    {quote.quotation_number}
+                                  </div>
                                   <div style={styles.historyRowDate}>
                                     {new Date(quote.created_at).toLocaleDateString()}
                                   </div>
@@ -1076,6 +1112,264 @@ export default function CustomersPage() {
                 <p style={styles.placeholderDesc}>Click any customer name on the left to review contact cards and historical invoice sync details.</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Order Details Modal */}
+      {showOrderDetailsModal && selectedOrderDetails && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel modal-content" style={styles.modalContent}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "12px", marginBottom: "16px" }}>
+              <div>
+                <h3 style={styles.modalTitle}>Order Details</h3>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                  Invoice Number: <strong style={{ color: "var(--primary)" }}>{selectedOrderDetails.order_number}</strong>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowOrderDetailsModal(false);
+                  setSelectedOrderDetails(null);
+                }}
+                style={styles.closeBtn}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={styles.detailGrid}>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Client Name</span>
+                <span style={styles.detailVal}>{selectedCust.name}</span>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Phone Number</span>
+                <span style={styles.detailVal}>{selectedCust.phone}</span>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Date Billed</span>
+                <span style={styles.detailVal}>
+                  {new Date(selectedOrderDetails.created_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
+                </span>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Handled By</span>
+                <span style={styles.detailVal}>{selectedOrderDetails.created_by || "Unknown"}</span>
+              </div>
+            </div>
+
+            <div style={{ margin: "16px 0", borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
+              <h4 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "var(--text-main)" }}>Job Items</h4>
+              <div style={styles.tableWrapper}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Job Item Description</th>
+                      <th style={{ ...styles.th, textAlign: "right" }}>Price</th>
+                      <th style={{ ...styles.th, textAlign: "center" }}>Qty</th>
+                      <th style={{ ...styles.th, textAlign: "right" }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(!selectedOrderDetails.items || selectedOrderDetails.items.length === 0) ? (
+                      <tr>
+                        <td colSpan="4" style={styles.emptyRow}>No items logged.</td>
+                      </tr>
+                    ) : (
+                      selectedOrderDetails.items.map((item, idx) => (
+                        <tr key={idx} style={styles.tr}>
+                          <td style={styles.td}>{item.name}</td>
+                          <td style={{ ...styles.td, textAlign: "right" }}>{formatCurrency(item.price)}</td>
+                          <td style={{ ...styles.td, textAlign: "center" }}>{item.qty}</td>
+                          <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>{formatCurrency(item.total)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderTop: "1px solid var(--border)", paddingTop: "16px", marginTop: "8px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                  Payment Method: <strong style={{ color: "var(--text-main)" }}>{selectedOrderDetails.payment_method?.replace("_", " ").toUpperCase()}</strong>
+                </div>
+                <div>
+                  <span className={`badge ${getStatusBadgeClass(selectedOrderDetails.status)}`}>
+                    {selectedOrderDetails.status?.replace("_", " ").toUpperCase()}
+                  </span>
+                </div>
+              </div>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px", textAlign: "right", minWidth: "180px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
+                  <span style={{ color: "var(--text-muted)" }}>Subtotal:</span>
+                  <strong style={{ color: "var(--text-main)" }}>{formatCurrency(selectedOrderDetails.total_amount)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
+                  <span style={{ color: "var(--text-muted)" }}>Amount Paid:</span>
+                  <strong style={{ color: "var(--accent-green)" }}>{formatCurrency(selectedOrderDetails.paid_amount)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", borderTop: "1px dashed var(--border)", paddingTop: "4px", marginTop: "4px" }}>
+                  <span style={{ color: "var(--text-muted)", fontWeight: "600" }}>Outstanding Balance:</span>
+                  <strong style={{ color: "var(--accent-orange)" }}>{formatCurrency(selectedOrderDetails.balance_amount)}</strong>
+                </div>
+              </div>
+            </div>
+
+            {selectedOrderDetails.special_note && (
+              <div style={{ marginTop: "12px", background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "10px 12px" }}>
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
+                  📝 Special Note
+                </div>
+                <div style={{ fontSize: "13px", color: "var(--text-main)", whiteSpace: "pre-wrap" }}>
+                  {selectedOrderDetails.special_note}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px" }}>
+              <button 
+                onClick={() => {
+                  window.open(`/orders/${selectedOrderDetails.id}/print`, "_blank");
+                }}
+                className="btn btn-primary"
+                style={{ height: "40px", background: "var(--secondary)", borderColor: "var(--secondary)" }}
+              >
+                Print Slip
+              </button>
+              <button 
+                onClick={() => {
+                  setShowOrderDetailsModal(false);
+                  setSelectedOrderDetails(null);
+                }}
+                className="btn btn-secondary"
+                style={{ height: "40px" }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quotation Details Modal */}
+      {showQuoteDetailsModal && selectedQuoteDetails && (
+        <div style={styles.modalOverlay}>
+          <div className="glass-panel modal-content" style={styles.modalContent}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "12px", marginBottom: "16px" }}>
+              <div>
+                <h3 style={styles.modalTitle}>Quotation Details</h3>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                  Quotation Number: <strong style={{ color: "var(--primary)" }}>{selectedQuoteDetails.quotation_number}</strong>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowQuoteDetailsModal(false);
+                  setSelectedQuoteDetails(null);
+                }}
+                style={styles.closeBtn}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={styles.detailGrid}>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Client Name</span>
+                <span style={styles.detailVal}>{selectedCust.name}</span>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Phone Number</span>
+                <span style={styles.detailVal}>{selectedCust.phone}</span>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Date Created</span>
+                <span style={styles.detailVal}>
+                  {new Date(selectedQuoteDetails.created_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
+                </span>
+              </div>
+              <div style={styles.detailItem}>
+                <span style={styles.detailLabel}>Created By</span>
+                <span style={styles.detailVal}>{selectedQuoteDetails.created_by || "Unknown"}</span>
+              </div>
+            </div>
+
+            <div style={{ margin: "16px 0", borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
+              <h4 style={{ fontSize: "14px", fontWeight: "700", marginBottom: "10px", color: "var(--text-main)" }}>Estimated Items</h4>
+              <div style={styles.tableWrapper}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Item Description</th>
+                      <th style={{ ...styles.th, textAlign: "right" }}>Price</th>
+                      <th style={{ ...styles.th, textAlign: "center" }}>Qty</th>
+                      <th style={{ ...styles.th, textAlign: "right" }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(!selectedQuoteDetails.items || selectedQuoteDetails.items.length === 0) ? (
+                      <tr>
+                        <td colSpan="4" style={styles.emptyRow}>No items logged.</td>
+                      </tr>
+                    ) : (
+                      selectedQuoteDetails.items.map((item, idx) => (
+                        <tr key={idx} style={styles.tr}>
+                          <td style={styles.td}>{item.name}</td>
+                          <td style={{ ...styles.td, textAlign: "right" }}>{formatCurrency(item.price)}</td>
+                          <td style={{ ...styles.td, textAlign: "center" }}>{item.qty}</td>
+                          <td style={{ ...styles.td, textAlign: "right", fontWeight: "600" }}>{formatCurrency(item.total)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderTop: "1px solid var(--border)", paddingTop: "16px", marginTop: "8px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                  Status: <strong style={{ color: selectedQuoteDetails.converted_to_order ? "var(--accent-green)" : "var(--accent-orange)" }}>
+                    {selectedQuoteDetails.converted_to_order ? "CONVERTED TO BILL" : "ACTIVE DRAFT"}
+                  </strong>
+                </div>
+              </div>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px", textAlign: "right", minWidth: "180px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", fontWeight: "700" }}>
+                  <span style={{ color: "var(--text-muted)" }}>Estimated Total:</span>
+                  <strong style={{ color: "var(--primary)" }}>{formatCurrency(selectedQuoteDetails.total_amount)}</strong>
+                </div>
+              </div>
+            </div>
+
+            {selectedQuoteDetails.special_note && (
+              <div style={{ marginTop: "12px", background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "10px 12px" }}>
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
+                  📝 Special Note
+                </div>
+                <div style={{ fontSize: "13px", color: "var(--text-main)", whiteSpace: "pre-wrap" }}>
+                  {selectedQuoteDetails.special_note}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "24px" }}>
+              <button 
+                onClick={() => {
+                  setShowQuoteDetailsModal(false);
+                  setSelectedQuoteDetails(null);
+                }}
+                className="btn btn-secondary"
+                style={{ height: "40px" }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1505,5 +1799,112 @@ const styles = {
   historyRowAmount: {
     fontSize: "13px",
     fontWeight: "600",
+  },
+  modalOverlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
+    backdropFilter: "blur(4px)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: "600px",
+    padding: "24px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+    background: "var(--bg-surface-elevated)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-md)",
+  },
+  modalTitle: {
+    fontSize: "20px",
+    fontWeight: "700",
+    color: "var(--text-main)",
+  },
+  modalSubtitle: {
+    fontSize: "13px",
+    color: "var(--text-muted)",
+  },
+  closeBtn: {
+    background: "none",
+    border: "none",
+    color: "var(--text-muted)",
+    cursor: "pointer",
+    padding: "4px",
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "var(--transition-fast)",
+  },
+  detailGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+    gap: "16px",
+    background: "rgba(255, 255, 255, 0.01)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+    padding: "16px",
+  },
+  detailItem: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+  },
+  detailLabel: {
+    fontSize: "11px",
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+    fontWeight: "600",
+    letterSpacing: "0.05em",
+  },
+  detailVal: {
+    fontSize: "14px",
+    fontWeight: "600",
+    color: "var(--text-main)",
+  },
+  tableWrapper: {
+    width: "100%",
+    overflowX: "auto",
+    maxHeight: "180px",
+    overflowY: "auto",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    textAlign: "left",
+  },
+  th: {
+    padding: "8px 12px",
+    fontSize: "11px",
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+    fontWeight: "600",
+    borderBottom: "1px solid var(--border)",
+    background: "rgba(15, 23, 42, 0.4)",
+  },
+  tr: {
+    borderBottom: "1px solid var(--border)",
+  },
+  td: {
+    padding: "10px 12px",
+    fontSize: "13px",
+    color: "var(--text-main)",
+  },
+  emptyRow: {
+    padding: "20px 0",
+    textAlign: "center",
+    color: "var(--text-subtle)",
+    fontSize: "13px",
   },
 };

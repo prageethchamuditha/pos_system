@@ -87,6 +87,8 @@ export default function POSPage() {
   const [posAdvanceMethod, setPosAdvanceMethod] = useState("cash");
   const [savingPOSAdvance, setSavingPOSAdvance] = useState(false);
   const [mobileActiveTab, setMobileActiveTab] = useState("catalog"); // 'catalog' | 'cart'
+  const [specialNote, setSpecialNote] = useState("");
+  const [showSpecialNoteInput, setShowSpecialNoteInput] = useState(false);
 
   useEffect(() => {
     if (selectedCustomer && Number(selectedCustomer.outstanding_balance || 0) > 0) {
@@ -336,6 +338,23 @@ export default function POSPage() {
 
   useEffect(() => {
     fetchCustomers();
+
+    // Sync shop settings from database
+    const loadShopSettingsFromDB = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("shop_settings")
+          .select("settings")
+          .eq("id", "default")
+          .single();
+        if (!error && data && data.settings) {
+          localStorage.setItem("printx_shop_settings", JSON.stringify(data.settings));
+        }
+      } catch (err) {
+        console.error("Failed to sync shop settings from database:", err);
+      }
+    };
+    loadShopSettingsFromDB();
 
     // Subscribe to real-time customer updates
     const customersChannel = supabase
@@ -885,6 +904,7 @@ export default function POSPage() {
             quotation_number: quotationNum,
             customer_id: customerToUse.id,
             total_amount: totalAmount,
+            special_note: specialNote.trim() || null,
             items: cart.map(item => ({ 
               name: item.name, 
               qty: item.qty, 
@@ -906,6 +926,8 @@ export default function POSPage() {
         setSuccessMsg(`Quotation ${quotationNum} Saved!`);
         setCart([]);
         setPaidAmount("");
+        setSpecialNote("");
+        setShowSpecialNoteInput(false);
         setSelectedCartItemId(null);
 
         setTimeout(() => {
@@ -966,6 +988,7 @@ export default function POSPage() {
             balance_amount: checkoutBalance,
             status: orderStatus,
             payment_method: storedMethod,
+            special_note: specialNote.trim() || null,
             items: cart.map(item => ({ 
               name: item.name, 
               qty: item.qty, 
@@ -1067,6 +1090,8 @@ export default function POSPage() {
         setPaidAmount("");
         setCreditAmount("");
         setSelectedCartItemId(null);
+        setSpecialNote("");
+        setShowSpecialNoteInput(false);
         // Clear walk-in state
         setWalkInName("");
         setWalkInPhone("");
@@ -1529,6 +1554,57 @@ export default function POSPage() {
                 </span>
               </div>
             )}
+
+            {/* Special Note Button & Input */}
+            <div style={{ marginTop: "12px", borderTop: "1px dashed var(--border)", paddingTop: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "12px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <FileText size={13} style={{ color: specialNote ? "var(--primary)" : "var(--text-muted)" }} />
+                  Special Note
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowSpecialNoteInput(!showSpecialNoteInput)}
+                  style={{
+                    background: showSpecialNoteInput || specialNote ? "rgba(99, 102, 241, 0.15)" : "none",
+                    border: "1px solid var(--border)",
+                    borderRadius: "4px",
+                    color: showSpecialNoteInput || specialNote ? "var(--primary)" : "var(--text-muted)",
+                    padding: "4px 8px",
+                    fontSize: "11px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    transition: "var(--transition-fast)"
+                  }}
+                >
+                  📝 {specialNote ? "Edit Note" : "Add Note"}
+                </button>
+              </div>
+              
+              {(showSpecialNoteInput || specialNote) && (
+                <div style={{ marginTop: "8px" }} className="animate-fade-in">
+                  <textarea
+                    placeholder="Type special note to print on invoice..."
+                    style={{
+                      width: "100%",
+                      minHeight: "50px",
+                      background: "rgba(15, 23, 42, 0.4)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-sm)",
+                      padding: "8px",
+                      fontSize: "12px",
+                      color: "var(--text-main)",
+                      outline: "none",
+                      resize: "none"
+                    }}
+                    value={specialNote}
+                    onChange={(e) => setSpecialNote(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Cart Footer Actions */}

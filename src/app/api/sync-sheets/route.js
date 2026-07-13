@@ -59,10 +59,21 @@ export async function GET(req) {
       }, { status: 400 });
     }
 
+    const action = searchParams.get("action");
+
+    if (action === "export_backup") {
+      const response = await fetch(`${scriptUrl}?action=export_backup`);
+      if (!response.ok) {
+        throw new Error(`Google Apps Script responded with status ${response.status}`);
+      }
+      const data = await response.json();
+      return NextResponse.json(data);
+    }
+
     if (!phone && !name) {
       return NextResponse.json({
         success: false,
-        message: "Missing lookup query parameters (phone or name)"
+        message: "Missing lookup query parameters (phone, name or action)"
       }, { status: 400 });
     }
 

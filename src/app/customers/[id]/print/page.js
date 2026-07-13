@@ -10,6 +10,7 @@ export default function CustomerPrintPage() {
   const [orders, setOrders] = useState([]);
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [settingsLoading, setSettingsLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState({ start: "", end: "" });
   const [shopSettings, setShopSettings] = useState({
     name: "PRINT X",
@@ -24,14 +25,28 @@ export default function CustomerPrintPage() {
   });
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("printx_shop_settings");
-      if (stored) {
-        setShopSettings(prev => ({ ...prev, ...JSON.parse(stored) }));
+    const loadShopSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("shop_settings")
+          .select("settings")
+          .eq("id", "default")
+          .single();
+        if (!error && data && data.settings) {
+          setShopSettings(prev => ({ ...prev, ...data.settings }));
+        } else {
+          const stored = localStorage.getItem("printx_shop_settings");
+          if (stored) {
+            setShopSettings(prev => ({ ...prev, ...JSON.parse(stored) }));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load settings:", err);
+      } finally {
+        setSettingsLoading(false);
       }
-    } catch (e) {
-      console.error("Failed to load settings:", e);
-    }
+    };
+    loadShopSettings();
   }, []);
 
   useEffect(() => {
@@ -102,13 +117,13 @@ export default function CustomerPrintPage() {
   };
 
   useEffect(() => {
-    if (!loading && customer) {
+    if (!loading && !settingsLoading && customer) {
       const timer = setTimeout(() => {
         window.print();
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [loading, customer]);
+  }, [loading, settingsLoading, customer]);
 
   const formatCurrency = (val) => {
     return new Intl.NumberFormat("en-LK", {
@@ -360,7 +375,7 @@ export default function CustomerPrintPage() {
           <div className="title-block">
             {shopSettings.logoUrl && (
               <img 
-                src={shopSettings.logoUrl} 
+                src="/logo.png" 
                 alt={shopSettings.name} 
                 style={{ height: "45px", maxWidth: "160px", marginBottom: "8px", objectFit: "contain", display: "block" }}
                 onError={(e) => {

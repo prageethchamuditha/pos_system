@@ -94,6 +94,7 @@ export default function SettingsPage() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [creatingUser, setCreatingUser] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
@@ -129,15 +130,29 @@ export default function SettingsPage() {
       setActiveTab("catalog");
     }
 
-    // Load shop settings from localStorage
-    try {
-      const stored = localStorage.getItem("printx_shop_settings");
-      if (stored) {
-        setShopSettings(prev => ({ ...prev, ...JSON.parse(stored) }));
+    // Load shop settings from database
+    const loadShopSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("shop_settings")
+          .select("settings")
+          .eq("id", "default")
+          .single();
+        
+        if (!error && data && data.settings) {
+          setShopSettings(prev => ({ ...prev, ...data.settings }));
+          localStorage.setItem("printx_shop_settings", JSON.stringify(data.settings));
+        } else {
+          const stored = localStorage.getItem("printx_shop_settings");
+          if (stored) {
+            setShopSettings(prev => ({ ...prev, ...JSON.parse(stored) }));
+          }
+        }
+      } catch (err) {
+        console.error(err);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    };
+    loadShopSettings();
 
     const initialize = async () => {
       await loadProducts();
@@ -223,17 +238,28 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveShopSettings = (e) => {
+  const handleSaveShopSettings = async (e) => {
     e.preventDefault();
     setSavingSettings(true);
     setErrorMsg("");
     setSuccessMsg("");
 
     try {
+      const { error: dbError } = await supabase
+        .from("shop_settings")
+        .upsert({
+          id: "default",
+          settings: shopSettings,
+          updated_at: new Date().toISOString()
+        });
+
+      if (dbError) throw dbError;
+
       localStorage.setItem("printx_shop_settings", JSON.stringify(shopSettings));
-      setSuccessMsg("Shop branding configurations updated!");
+      setSuccessMsg("Shop branding configurations updated globally!");
     } catch (err) {
-      setErrorMsg("Failed to update branding settings.");
+      console.error(err);
+      setErrorMsg("Failed to update branding settings in database: " + err.message);
     } finally {
       setSavingSettings(false);
     }
@@ -491,6 +517,140 @@ export default function SettingsPage() {
       setErrorMsg(err.message || "Failed to reset database tables.");
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const handleRestoreFromGoogleSheets = async () => {
+    const confirmRestore = window.confirm(
+      "⚠️ EMERGENCY RESTORE: This will import backup data from your connected Google Sheet and merge/overwrite current database records.\n\n" +
+      "This action will:\n" +
+      "1. Upsert customer records (with their backup outstanding balances).\n" +
+      "2. Restore invoices with a default item entry 'Restored Transaction' to preserve totals.\n" +
+      "3. Restore audit reports (Day End and Weekend).\n\n" +
+      "Are you sure you want to proceed?"
+    );
+    if (!confirmRestore) return;
+
+    setRestoring(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    try {
+      // 1. Fetch full backup data from API
+      const response = await fetch("/api/sync-sheets?action=export_backup");
+      if (!response.ok) {
+        throw new Error(`Failed to fetch backup: HTTP ${response.status}`);
+      }
+
+      const backup = await response.json();
+      if (!backup.success) {
+        throw new Error(backup.message || "Failed to download backup data.");
+      }
+
+      let restoredSummary = [];
+
+      // A. Restore Customers
+      if (backup.customers && backup.customers.length > 0) {
+        for (const c of backup.customers) {
+          const passcode = Math.floor(1000 + Math.random() * 9000).toString();
+          const { error: cErr } = await supabase
+            .from("customers")
+            .upsert({
+              name: c.name,
+              phone: c.phone,
+              outstanding_balance: c.outstanding_balance,
+              portal_passcode: passcode,
+              portal_duration_limit: "2m",
+              created_at: new Date().toISOString()
+            }, { onConflict: "phone" });
+          if (cErr) throw cErr;
+        }
+        restoredSummary.push(`${backup.customers.length} Customers`);
+      }
+
+      // Query latest customers to map phone number to uuid
+      const { data: dbCusts, error: mapErr } = await supabase
+        .from("customers")
+        .select("id, phone");
+      if (mapErr) throw mapErr;
+
+      const phoneToIdMap = {};
+      if (dbCusts) {
+        dbCusts.forEach(c => {
+          phoneToIdMap[c.phone] = c.id;
+        });
+      }
+
+      // B. Restore Orders
+      if (backup.orders && backup.orders.length > 0) {
+        for (const o of backup.orders) {
+          const customerId = phoneToIdMap[o.customer_phone] || null;
+          const itemsArray = [{ name: "Restored Transaction", qty: 1, price: o.total_amount, total: o.total_amount }];
+          
+          const { error: oErr } = await supabase
+            .from("orders")
+            .upsert({
+              id: o.id || undefined,
+              order_number: o.order_number,
+              customer_id: customerId,
+              items: itemsArray,
+              total_amount: o.total_amount,
+              paid_amount: o.paid_amount,
+              balance_amount: o.balance_amount,
+              status: o.status,
+              created_by: o.created_by,
+              created_at: o.created_at
+            }, { onConflict: "order_number" });
+          if (oErr) throw oErr;
+        }
+        restoredSummary.push(`${backup.orders.length} Invoices`);
+      }
+
+      // C. Restore Day End Reports
+      if (backup.day_end_reports && backup.day_end_reports.length > 0) {
+        for (const r of backup.day_end_reports) {
+          const { error: deErr } = await supabase
+            .from("day_end_reports")
+            .upsert({
+              date: r.date,
+              copy_count: r.copy_count,
+              total_sales: r.total_sales,
+              total_cash_payments: r.total_cash_payments,
+              manual_billing_amount: r.manual_billing_amount,
+              total_outstanding: r.total_outstanding,
+              expense_amount: r.expense_amount,
+              expense_reason: r.expense_reason,
+              expense_staff: r.expense_staff,
+              net_drawer_cash: r.net_drawer_cash,
+              created_by: r.created_by
+            }, { onConflict: "date" });
+          if (deErr) throw deErr;
+        }
+        restoredSummary.push(`${backup.day_end_reports.length} Day End Audits`);
+      }
+
+      // D. Restore Weekend Reports
+      if (backup.weekend_reports && backup.weekend_reports.length > 0) {
+        for (const w of backup.weekend_reports) {
+          const { error: weErr } = await supabase
+            .from("weekend_reports")
+            .upsert({
+              date: w.date,
+              entered_monthly_total: w.entered_monthly_total,
+              calculated_weekly_revenue: w.calculated_weekly_revenue,
+              created_by: w.created_by
+            }, { onConflict: "date" });
+          if (weErr) throw weErr;
+        }
+        restoredSummary.push(`${backup.weekend_reports.length} Weekend Audits`);
+      }
+
+      setSuccessMsg(`Disaster recovery completed successfully! Restored: ${restoredSummary.join(", ")}.`);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message || "Failed to restore backup from Google Sheets.");
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -1055,6 +1215,36 @@ export default function SettingsPage() {
                 >
                   <Trash2 size={16} />
                   <span>Execute Selected Reset</span>
+                </button>
+              </div>
+
+              {/* Disaster Recovery & Sheet Backup Import */}
+              <div style={{ marginTop: "40px", paddingTop: "30px", borderTop: "1px dashed var(--border)" }}>
+                <h3 style={{ display: "flex", alignItems: "center", gap: "8px", textTransform: "uppercase", fontSize: "14px", letterSpacing: "0.05em", color: "var(--primary)" }}>
+                  <RefreshCw size={18} />
+                  <span>Disaster Recovery & Sheet Backup Import</span>
+                </h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "13px", marginTop: "8px", marginBottom: "16px" }}>
+                  If you need to restore or sync your POS state after an emergency, you can pull your full backup data from the connected Google Sheet spreadsheet. This will merge back-up customers, orders, day audits, and weekend reports into Supabase.
+                </p>
+
+                <button 
+                  type="button" 
+                  onClick={handleRestoreFromGoogleSheets}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: "10px 16px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    borderRadius: "var(--radius-sm)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
+                  }}
+                  disabled={restoring || savingSettings}
+                >
+                  <RefreshCw size={16} className={restoring ? "animate-spin" : ""} />
+                  <span>{restoring ? "Importing & Restoring Database..." : "Import & Restore Backup from Google Sheet"}</span>
                 </button>
               </div>
             </div>

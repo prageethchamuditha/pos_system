@@ -54,6 +54,10 @@ create table if not exists public.orders (
     balance_amount numeric not null,
     payment_method text not null default 'cash', -- 'cash', 'bank_transfer', 'pending'
     status text not null default 'pending', -- 'paid', 'partially_paid', 'pending', 'voided'
+    voided_by text,
+    voided_reason text,
+    voided_at timestamp with time zone,
+    special_note text,
     created_by text, -- Username who created the bill
     created_at timestamp with time zone default now()
 );
@@ -73,6 +77,7 @@ create table if not exists public.quotations (
     items jsonb not null,
     total_amount numeric not null,
     converted_to_order boolean not null default false,
+    special_note text,
     created_by text,
     created_at timestamp with time zone default now()
 );
@@ -133,3 +138,16 @@ create table if not exists public.weekend_reports (
 alter table public.weekend_reports enable row level security;
 create policy "Allow all actions on weekend_reports for authenticated users" on public.weekend_reports
     for all to authenticated using (true) with check (true);
+
+-- 7. SHOP CONFIGURATION SETTINGS TABLE
+create table if not exists public.shop_settings (
+    id text primary key default 'default',
+    settings jsonb not null default '{}'::jsonb,
+    updated_at timestamp with time zone default now()
+);
+
+alter table public.shop_settings enable row level security;
+create policy "Allow all actions on shop_settings for authenticated users" on public.shop_settings
+    for all to authenticated using (true) with check (true);
+create policy "Allow read on shop_settings for public anonymous access (portal views)" on public.shop_settings
+    for select to anon using (true);

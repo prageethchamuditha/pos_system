@@ -11,6 +11,7 @@ export default function PrintPage() {
   const [isQuotation, setIsQuotation] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
 
   // Custom Shop Settings from Settings tab
   const [shopSettings, setShopSettings] = useState({
@@ -63,15 +64,29 @@ export default function PrintPage() {
     checkMobile();
     window.addEventListener("resize", checkMobile);
 
-    // Load custom shop settings from localStorage
-    try {
-      const stored = localStorage.getItem("printx_shop_settings");
-      if (stored) {
-        setShopSettings(prev => ({ ...prev, ...JSON.parse(stored) }));
+    // Load shop settings from database
+    const loadShopSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("shop_settings")
+          .select("settings")
+          .eq("id", "default")
+          .single();
+        if (!error && data && data.settings) {
+          setShopSettings(prev => ({ ...prev, ...data.settings }));
+        } else {
+          const stored = localStorage.getItem("printx_shop_settings");
+          if (stored) {
+            setShopSettings(prev => ({ ...prev, ...JSON.parse(stored) }));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load settings from DB:", err);
+      } finally {
+        setSettingsLoading(false);
       }
-    } catch (e) {
-      console.error("Failed to load settings:", e);
-    }
+    };
+    loadShopSettings();
 
     if (id) {
       fetchTransactionDetails();
@@ -115,13 +130,13 @@ export default function PrintPage() {
 
   // Auto-print only on desktop (not mobile — customers just want to read)
   useEffect(() => {
-    if (!loading && data && !isMobile) {
+    if (!loading && !settingsLoading && data && !isMobile) {
       const timer = setTimeout(() => {
         window.print();
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [loading, data, isMobile]);
+  }, [loading, settingsLoading, data, isMobile]);
 
   const formatCurrency = (val) => {
     const num = Number(val || 0);
@@ -525,7 +540,7 @@ export default function PrintPage() {
           {/* Header Card */}
           <div className="mv-header-card">
             <img
-              src={shopSettings.logoUrl}
+              src="/logo.png"
               alt={shopSettings.name}
               className="mv-logo"
               onError={(e) => { e.target.style.display = "none"; }}
@@ -629,6 +644,16 @@ export default function PrintPage() {
             )}
           </div>
 
+          {/* Special Note (if present) */}
+          {data.special_note && (
+            <div className="mv-card">
+              <div className="mv-card-title">📝 Special Note</div>
+              <div style={{ fontSize: "12px", color: "#1f2937", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                {data.special_note}
+              </div>
+            </div>
+          )}
+
           {/* Terms (collapsed, small) */}
           <div className="mv-card">
             <div className="mv-card-title">📋 Terms & Conditions</div>
@@ -664,7 +689,7 @@ export default function PrintPage() {
               </div>
               <div className="d-header-right">
                 <img
-                  src={shopSettings.logoUrl}
+                  src="/logo.png"
                   alt={shopSettings.name}
                   className="d-logo"
                   onError={(e) => { e.target.style.display = "none"; }}
@@ -766,6 +791,18 @@ export default function PrintPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* ── SPECIAL NOTE ── */}
+            {data.special_note && (
+              <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "6px", marginBottom: "8px" }}>
+                <div style={{ fontSize: "8px", fontWeight: "700", color: "#555", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "4px" }}>
+                  Special Note
+                </div>
+                <pre style={{ fontFamily: "inherit", fontSize: "9px", color: "#111", margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
+                  {data.special_note}
+                </pre>
               </div>
             )}
 

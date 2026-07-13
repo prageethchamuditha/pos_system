@@ -12,6 +12,11 @@ We have successfully resolved compilation bugs, finalized dynamic branding confi
 * **Owner Account Bootstrapping & Sign Up (`/login` and `AuthGuard.js`):** Added support for direct onboarding of owner accounts. The system now automatically grants the `owner` role to the very first user who registers, or to any user signing up with an email containing "owner" (e.g., `owner@printx.lk`). We also added a **Sign Up** option to the login page to enable initial account creation in production.
 * **Responsive Sidebar & Navigation Fix (`layout.js` and `globals.css`):** Fixed a layout bug where the sidebar container's responsive properties (like `left: -280px` on mobile) were written as inline React styles, overriding CSS media queries and causing the sidebar to be completely hidden off-screen (left: -280px) on desktop screens too. Moved the responsive rules (sidebar positions, main content padding shift, and mobile header displays) to standard CSS classes, making the sidebar and its **Log Out** button fully visible on desktop.
 * **Dynamic Shop Branding on Customer Statements (`/customers/[id]/print/page.js`):** Modified the customer account statement print template to load configurations dynamically from `localStorage` (matching the invoice print page). The statement printout now dynamically renders:
+    - **Global Logo Rendering**:
+   - Modified the print layout templates (for both invoice receipts and customer account statement print pages) to load settings dynamically from the database on mount.
+   - This ensures all computers (Owner dashboard, Staff checkout terminals, and Customer statements opened from portal links) display the company branding and business logo correctly.
+   - **Print Loader Race Condition Fix:** Implemented a `settingsLoading` tracking state to ensure that automatic printer triggering (`window.print()`) is put on hold until **both** the invoice database record and the large business configuration logo payload have completed their fetch operations. This resolves cases where the browser's print dialog opened before the logo state finished binding, causing empty print headers.
+   - **Hardcoded Static Public Logo:** Extracted and decoded the database Base64 logo data directly into a static image file stored in the project directory at `public/logo.png`. Updated the print layout rendering logic (`src/app/orders/[id]/print/page.js` and `src/app/customers/[id]/print/page.js`) to render `/logo.png` directly as a static server asset, resolving print rendering failures across incognito sessions and remote devices instantly.
     - **Invoice Print Integration:** The printed receipt slip now displays the actual percentage or cash discounts in its "Discount" column instead of a hardcoded `0.00%`.
 
 ---
@@ -144,6 +149,26 @@ We converted the invoice printed template into a modern, high-end A4 design:
    - Wrapped customer profiles in a stylized **Bill To** info card (`#f8fafc` background with a solid left border band).
 3. **Clean SaaS Table Design:** Removed thick, legacy black borders. Swapped them for a modern borderless style with a dark slate header accent (`#0f172a`), zebra-striping rows (`#f8fafc`), and thin light gray row dividers (`#e2e8f0`).
 4. **Structured Totals Panel:** Enclosed total calculations and payment methods in an outlined, shaded summary card with clear bold pricing hierarchy.
+
+---
+
+## 16. Disaster Recovery: Google Sheets Backup Restore Option
+
+We implemented a disaster recovery backup import system to restore full POS databases from your connected Google Sheet:
+
+1. **Google Apps Script Export API**:
+   - Upgraded the script template `google_apps_script.js` to version 3.0.
+   - Added a new `action=export_backup` lookup handler inside `doGet(e)` to dump all rows from all backup tabs (Customers, Orders, Day End Details, Weekend Details) in a single unified JSON payload.
+
+2. **Next.js Sync-Sheets API Route Integration**:
+   - Extended the local `/api/sync-sheets` REST router to support fetching full backups securely using the backend environment variable script web app link.
+
+3. **Database Upsert Reconstruction Logic**:
+   - Added a new **Disaster Recovery & Sheet Backup Import** dashboard panel under Settings.
+   - Clicking **Import & Restore Backup from Google Sheet** triggers:
+     - **Customers**: Restores names, phones, and historical outstanding debt balances. Assigns secure auto-generated 4-digit portal PINs.
+     - **Invoices**: Resolves foreign key UUIDs based on restored customer phone numbers, generates placeholder item rows (`Restored Transaction`) mapping correct invoice amounts and statuses, and upserts transactions back to Supabase.
+     - **Day End & Weekend Audits**: Reconstructs all historic cash drawer closing records and weekly reconciliation audits.
 
 ---
 
