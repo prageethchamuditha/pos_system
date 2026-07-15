@@ -65,6 +65,12 @@ export default function CustomersPage() {
   const [advanceNote, setAdvanceNote] = useState("");
   const [savingAdvance, setSavingAdvance] = useState(false);
 
+  // Outstanding Payment States
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [savingPayment, setSavingPayment] = useState(false);
+
   // UI state
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -166,7 +172,7 @@ export default function CustomersPage() {
         .from("customers")
         .insert({
           name: name.trim(),
-          phone: phone.trim(),
+          phone: phone.replace(/[\s-()]/g, ""),
           email: email.trim() || null,
           address: address.trim() || null,
           outstanding_balance: 0,
@@ -290,11 +296,12 @@ export default function CustomersPage() {
     setSavingProfile(true);
     setErrorMsg("");
     try {
+      const cleanedEditPhone = editPhone.replace(/[\s-()]/g, "");
       const { error } = await supabase
         .from("customers")
         .update({
           name: editName.trim(),
-          phone: editPhone.trim(),
+          phone: cleanedEditPhone,
           email: editEmail.trim() || null,
           address: editAddress.trim() || null,
         })
@@ -305,7 +312,7 @@ export default function CustomersPage() {
       const updatedCust = {
         ...selectedCust,
         name: editName.trim(),
-        phone: editPhone.trim(),
+        phone: cleanedEditPhone,
         email: editEmail.trim() || null,
         address: editAddress.trim() || null,
       };
@@ -355,6 +362,106 @@ export default function CustomersPage() {
       setErrorMsg(err.message || "Failed to record advance payment.");
     } finally {
       setSavingAdvance(false);
+    }
+  };
+
+  const handleRecordPayment = async () => {
+    const amount = parseFloat(paymentAmount);
+    if (!amount || amount <= 0) {
+      setErrorMsg("Please enter a valid payment amount greater than zero.");
+      return;
+    }
+    if (amount > selectedCust.outstanding_balance) {
+      const confirmExceed = window.confirm(
+        `Note: The payment amount (${formatCurrency(amount)}) exceeds the customer's current outstanding balance (${formatCurrency(selectedCust.outstanding_balance)}).\n\n` +
+        `This will put their account into credit. Do you want to proceed?`
+      );
+      if (!confirmExceed) return;
+    }
+
+    setSavingPayment(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    try {
+      const year = new Date().getFullYear();
+      
+      // 1. Generate unique order/payment receipt number
+      const { data: countData } = await supabase
+        .from("orders")
+        .select("id")
+        .gte("created_at", new Date(year, 0, 1).toISOString());
+
+      const seq = ((countData?.length || 0) + 1).toString().padStart(4, "0");
+      const paymentNum = `PAY-${year}-${seq}`;
+
+      // 2. Insert Payment Transaction in Orders table (so it counts as received money for the day)
+      const { data: paymentOrder, error: oError } = await supabase
+        .from("orders")
+        .insert({
+          order_number: paymentNum,
+          customer_id: selectedCust.id,
+          total_amount: 0,
+          paid_amount: amount,
+          balance_amount: -amount,
+          status: "paid",
+          items: [{ name: paymentNote.trim() || "Account Balance Payment", qty: 1, price: 0, total: 0 }],
+          created_by: profile?.username || "Unknown",
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (oError) throw oError;
+
+      // 3. Update outstanding balance in Customers table
+      const { data: latestCust } = await supabase
+        .from("customers")
+        .select("outstanding_balance")
+        .eq("id", selectedCust.id)
+        .single();
+      const latestBalance = latestCust ? Number(latestCust.outstanding_balance || 0) : 0;
+      const newBalance = latestBalance - amount;
+
+      const { error: cError } = await supabase
+        .from("customers")
+        .update({ outstanding_balance: newBalance })
+        .eq("id", selectedCust.id);
+      if (cError) throw cError;
+
+      // 4. Sheets Sync
+      try {
+        await fetch("/api/sync-sheets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...paymentOrder,
+            customer_name: selectedCust.name,
+            customer_phone: selectedCust.phone
+          })
+        });
+      } catch (sheetErr) {
+        console.error("Sheets sync failed:", sheetErr);
+      }
+
+      // 5. Update local state
+      const updatedCust = { ...selectedCust, outstanding_balance: newBalance };
+      setSelectedCust(updatedCust);
+      setCustomers(prev => prev.map(c => c.id === selectedCust.id ? updatedCust : c));
+      
+      // Also fetch and append to local orders history
+      setCustOrders(prev => [paymentOrder, ...prev]);
+
+      setShowPaymentModal(false);
+      setPaymentAmount("");
+      setPaymentNote("");
+      setSuccessMsg(`Payment of ${formatCurrency(amount)} recorded successfully! Outstanding balance reduced.`);
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message || "Failed to record payment.");
+    } finally {
+      setSavingPayment(false);
     }
   };
 
@@ -685,6 +792,15 @@ export default function CustomersPage() {
                       <span>Advance</span>
                     </button>
 
+                    <button
+                      onClick={() => { setShowPaymentModal(!showPaymentModal); setPaymentAmount(""); setPaymentNote(""); setErrorMsg(""); }}
+                      className="btn btn-secondary"
+                      style={{ height: "36px", padding: "0 14px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px", borderColor: "rgba(249,115,22,0.4)", color: "var(--accent-orange)", background: "rgba(249,115,22,0.06)" }}
+                    >
+                      <Check size={14} />
+                      <span>Payments</span>
+                    </button>
+
                     {isAuthorized && (
                       <button
                         onClick={handleDeleteCustomer}
@@ -768,6 +884,61 @@ export default function CustomersPage() {
                         </button>
                         <button
                           onClick={() => setShowAdvanceModal(false)}
+                          className="btn btn-secondary"
+                          style={{ padding: "8px 12px", fontSize: "12px", height: "auto" }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Outstanding Payment Modal */}
+                {showPaymentModal && (
+                  <div style={{ background: "rgba(249,115,22,0.06)", border: "1px solid rgba(249,115,22,0.25)", borderRadius: "10px", padding: "16px", marginBottom: "12px" }} className="animate-fade-in">
+                    <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--accent-orange)", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Check size={14} /> Record Outstanding Balance Payment
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
+                      This records a payment made by the customer to pay off or settle their pending outstanding balance debt. It will immediately reduce their debt and record today's cash collections.
+                    </div>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end" }}>
+                      <div style={{ flex: 1, minWidth: "120px" }}>
+                        <label style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Payment Amount (LKR) *</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          placeholder={`Max ${selectedCust.outstanding_balance}`}
+                          min={1}
+                          value={paymentAmount}
+                          onChange={(e) => setPaymentAmount(e.target.value)}
+                          style={{ width: "100%" }}
+                          autoFocus
+                        />
+                      </div>
+                      <div style={{ flex: 2, minWidth: "160px" }}>
+                        <label style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Note (optional)</label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          placeholder="e.g. Paid off January bill"
+                          value={paymentNote}
+                          onChange={(e) => setPaymentNote(e.target.value)}
+                          style={{ width: "100%" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          onClick={handleRecordPayment}
+                          disabled={savingPayment || !paymentAmount}
+                          className="btn btn-primary"
+                          style={{ padding: "8px 16px", fontSize: "12px", height: "auto", display: "flex", alignItems: "center", gap: "4px", background: "var(--accent-orange)", borderColor: "var(--accent-orange)" }}
+                        >
+                          <Check size={13} />{savingPayment ? "Saving..." : "Record Payment"}
+                        </button>
+                        <button
+                          onClick={() => setShowPaymentModal(false)}
                           className="btn btn-secondary"
                           style={{ padding: "8px 12px", fontSize: "12px", height: "auto" }}
                         >

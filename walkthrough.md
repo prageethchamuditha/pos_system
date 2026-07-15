@@ -172,6 +172,24 @@ We implemented a disaster recovery backup import system to restore full POS data
 
 ---
 
+## 17. Quick Outstanding Balance Payments
+
+We added a dedicated payments workflow directly inside client registry cards to record debt payments:
+
+1. **Payments Button UI**:
+   - Added a new, prominent **Payments** button (`Check` icon, orange accent theme) inside the customer detail registry panel.
+   - Triggers an inline, clean form where cashiers can quickly enter the cash payment amount received from the teacher/customer.
+
+2. **Supabase Multi-Table updates**:
+   - **Customers table**: Subtracts the payment amount from the selected customer's `outstanding_balance` in Supabase, keeping their credit/debt state fully up to date.
+   - **Orders table**: Creates a special payment ledger transaction (prefixed as `PAY-YYYY-XXXX`) with `total_amount = 0`, `paid_amount = X`, and `balance_amount = -X`. 
+   - This ensures the daily collections metrics on the dashboard and day-end shift audits automatically include the debt collections money, maintaining 100% accurate financial counts.
+
+3. **Google Sheets Syncing**:
+   - Automatically posts the payment order row to the backend Google Sheet API, ensuring remote spreadsheets record the payment transaction and reduce outstanding balances in real-time.
+
+---
+
 ## 3. Verification
 
 ### Build Success

@@ -99,11 +99,13 @@ export default function PortalPage() {
     setLoading(true);
     setLoginError("");
 
+    const cleanedPhone = phoneInput.replace(/[\s-()]/g, "");
+
     try {
       const { data, error } = await supabase
         .from("customers")
         .select("*")
-        .eq("phone", phoneInput.trim())
+        .or(`phone.eq.${phoneInput.trim()},phone.eq.${cleanedPhone}`)
         .eq("portal_passcode", passcodeInput.trim())
         .single();
 
